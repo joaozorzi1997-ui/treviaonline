@@ -290,18 +290,18 @@ body.nostick #game{position:static!important;max-height:none!important}
 #profModal .pBt{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
 #profModal .pBt button{padding:6px 12px;border:1px solid #0003;border-radius:8px;background:#f3f5f3;cursor:pointer;font:inherit}
 #profModal .pBt .pOk{background:#1a2320;color:#fff}#profModal .pBt .pDel{color:#c0392b}
-#chatBox{position:fixed;left:8px;bottom:8px;z-index:58;width:min(280px,calc(100vw - 16px));background:#fff;border:1px solid #0003;border-radius:12px;box-shadow:0 4px 18px #0003;font-size:.82rem;overflow:hidden}
+#chatBox{position:fixed;left:8px;bottom:8px;z-index:58;width:min(280px,calc(100vw - 16px));background:#fff;color:#1a2320;border:1px solid #0003;border-radius:12px;box-shadow:0 4px 18px #0003;font-size:.82rem;overflow:hidden}
 #chatBox[hidden]{display:none}
 #chatBox .chH{display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2320;color:#fff;cursor:default}
 #chatBox.chMin{width:auto;max-width:200px}#chatBox.chMin .chH{cursor:pointer}
 #chatBox .chT{flex:1;font-size:.8rem;white-space:nowrap}
 #chatBox .chB{background:#e0452c;border-radius:99px;font-size:.7rem;padding:0 6px;min-width:16px;text-align:center}
 #chatBox .chM{background:none;border:0;color:#fff;font-size:1.1rem;line-height:1;cursor:pointer;padding:0 4px}
-#chatBox .chL{height:150px;overflow-y:auto;padding:6px 8px;display:flex;flex-direction:column;gap:3px;background:#fafbfa}
+#chatBox .chL{height:150px;overflow-y:auto;padding:6px 8px;display:flex;flex-direction:column;gap:3px;background:#fafbfa;color:#1a2320}
 #chatBox .chMsg{word-break:break-word}#chatBox .chMsg.me{text-align:right}
-#chatBox .chN.b1{color:#1f5fbf}#chatBox .chN.b2{color:#c0392b}
+#chatBox .chN.b1{color:#1f5fbf}#chatBox .chN.b2{color:#c0392b}#chatBox .chMsg{color:#1a2320}#chatBox .chF input::placeholder{color:#667}
 #chatBox .chF{display:flex;border-top:1px solid #0002}
-#chatBox .chF input{flex:1;border:0;padding:7px 8px;font:inherit;outline:none;min-width:0}
+#chatBox .chF input{flex:1;border:0;background:#fff;color:#1a2320;padding:7px 8px;font:inherit;outline:none;min-width:0}
 #chatBox .chF button{border:0;background:#1a2320;color:#fff;padding:0 12px;cursor:pointer}
 </style>
 <script src="config.js"></script>
@@ -790,13 +790,14 @@ async function joinRoom(code,create){
   if(!window.TreviaRoom||!TreviaRoom.isConfigured()){L.textContent="Salas online não estão configuradas neste site.";return;}
   if(!create){code=TreviaRoom.parseCode(code);if(!code){L.textContent="Código inválido.";return;}}
   L.textContent="Conectando…";
-  const H={onMessage:m=>onMsg(m),onPeerLeave:id=>netPeerLeave(id),onStatus:st=>netStatus(st)};
+  const H=cnH;
   const room=create?await TreviaRoom.createRoom(H):await TreviaRoom.joinRoom(code,H);
   code=room.code;
   const r={emit:(t,d)=>room.send(t,d),leave:()=>room.leave()};
   online={r,room,code,seat:create?1:2,ready:{1:false,2:false},layouts:{},sent:0,me:room.peerId,guest:null,hostId:null,revealed:false,started:false};
   flip=online.seat===2;adir=null;myTeam=online.seat;myArmy=[];brushA="soldier";armyStart=true;aiTeam=0;formMode=0;lab=false;
   try{location.hash=code;}catch(e){}
+  netKeepAlive();
   if(create){mode="army";L.textContent="";try{navigator.clipboard.writeText(room.link);}catch(e){}$("armyMsg").textContent="Sala criada. Envie este link ao adversário: "+room.link;}
   else{L.textContent="Entrando na sala "+code+"…";r.emit("t",{k:"hello"}).catch(()=>{});setTimeout(()=>{if(online&&!online.spec&&mode==="lobby")L.textContent="Ninguém respondeu: confira o código e se o anfitrião está com a página aberta.";},6000);}
   render();
@@ -805,6 +806,15 @@ async function joinRoom(code,create){
 // ===== Rede: avisos de desconexão e reenvio de estado ao reconectar (o transporte fica em room-provider.js) =====
 function netNote(t,sticky){let e=$("netNote");if(!e){e=document.createElement("div");e.id="netNote";e.setAttribute("role","status");e.style.cssText="position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:90;background:#1a2320;color:#fff;padding:8px 14px;border-radius:10px;font:600 .9rem system-ui;box-shadow:0 4px 18px #0006;max-width:90vw;text-align:center";document.body.appendChild(e);}
  e.textContent=t;e.hidden=false;clearTimeout(e._t);if(!sticky)e._t=setTimeout(()=>{e.hidden=true;},9000);}
+// reenvia "pronto"/"layout" enquanto a partida não começa: mensagens enviadas antes do adversário entrar não se perdem
+function netResync(){
+ if(!online||mode==="play")return;
+ const me=online.seat;
+ if(online.ready[me])online.r.emit("t",{k:"ready",s:me}).catch(()=>{});
+ if(online.revealed&&online.layouts[me])online.r.emit("t",{k:"layout",s:me,L:online.layouts[me]}).catch(()=>{});
+}
+let _netKA=null;
+function netKeepAlive(){clearInterval(_netKA);_netKA=setInterval(()=>{if(!online){clearInterval(_netKA);return;}netResync();},3000);}
 function netPeerLeave(id){
  if(!online)return;
  if(online.seat===1&&online.guest===id){online.guest=null;if(mode==="play"&&!over)log("O adversário desconectou.");netNote("O adversário desconectou.");}
@@ -813,7 +823,7 @@ function netPeerLeave(id){
 function netStatus(st){
  if(!online)return;
  if(st==="disconnected")netNote("Conexão perdida. Tentando reconectar…",true);
- else if(st==="reconnected"){netNote("Reconectado.");
+ else if(st==="reconnected"){netNote("Reconectado.");netResync();
   if(online.seat===1){if(mode==="play")online.r.emit("t",{k:"state",S:snap()}).catch(()=>{});}
   else online.r.emit("t",{k:"hello"}).catch(()=>{});}
 }
@@ -1490,7 +1500,7 @@ function mNode(i,o){
 function mPlur(t,n){const s=MNAME[t].toLowerCase();return n>1?(s==="guardião"?"guardiões":s+"s"):s;}
 function mComp(g){const a=[];if(g.c)a.push("★"+TYPES[g.c].name+(MP&&g.o&&MP.chp&&MP.chp[g.o]>0?" ♥"+MP.chp[g.o]+"/"+MP.cmax[g.o]:""));MUT.forEach(t=>{if(g.u[t])a.push(g.u[t]+" "+mPlur(t,g.u[t]));});if(g.und)a.push(g.und+" morto"+(g.und>1?"s":"")+"-vivo"+(g.und>1?"s":""));return a.join(", ");}
 function mLog(t){MP.log.unshift(t);if(MP.log.length>40)MP.log.pop();}
-function mHuman(){return MP&&MP.vs[MP.turn]==="h";}
+function mHuman(){return MP&&MP.vs[MP.turn]==="h"&&!(MP.net&&mapB);}
 
 // ---------- Composições de time ----------
 const TEAMS={A:[3,6,2],B:[3,9,1],C:[3,12,0],D:[2,9,2],E:[2,11,1],F:[2,14,0],G:[1,11,2],H:[1,13,1],I:[1,16,0],J:[0,14,2],K:[0,16,1],L:[0,20,0],M:[0,5,5],N:[5,0,3]},TK=Object.keys(TEAMS);
@@ -1512,12 +1522,13 @@ function teamPick(o,v){
 function renderClassicOpts(){
  const o=$("clOpts");o.innerHTML="";
  const row=(lb,items)=>{const d=document.createElement("div");d.className="row";const s=document.createElement("span");s.className="leg";s.textContent=lb;d.appendChild(s);items.forEach(i=>d.appendChild(i));o.appendChild(d);};
- $("clGo").textContent=cmOpp==="bb"?"Assistir uma partida (bot vs bot)":"Iniciar partida clássica";
- row("Adversário:",[["bot","Bot"],["2p","2 jogadores (mesmo aparelho)"],["bb","Bot vs Bot"]].map(([v,t])=>btn(t,cmOpp===v,()=>{cmOpp=v;render();})));
+ $("clGo").textContent=cmOpp==="bb"?"Assistir uma partida (bot vs bot)":cmOpp==="net"?"Criar sala online":"Iniciar partida clássica";
+ row("Adversário:",[["bot","Bot"],["2p","2 jogadores (mesmo aparelho)"],["bb","Bot vs Bot"]].concat(window.TreviaRoom&&TreviaRoom.isConfigured()?[["net","Sala online"]]:[]).map(([v,t])=>btn(t,cmOpp===v,()=>{cmOpp=v;render();})));
  if(cmOpp==="bot")row("Dificuldade:",[[false,"Normal"],[true,"Difícil (inimigo começa com +2 arqueiros)"]].map(([v,t])=>btn(t,cmHard===v,()=>{cmHard=v;render();})));
- if(cmOpp==="bot")row("Você joga de:",[[1,"Azul"],[2,"Vermelho"]].map(([v,t])=>btn(t,cmColor===v,()=>{cmColor=v;render();})));
+ if(cmOpp==="bot"||cmOpp==="net")row(cmOpp==="net"?"Sua cor (ao criar a sala):":"Você joga de:",[[1,"Azul"],[2,"Vermelho"]].map(([v,t])=>btn(t,cmColor===v,()=>{cmColor=v;render();})));
  const ks=Object.keys(TYPES).filter(k=>TYPES[k].champ&&!TYPES[k].noPlace);
- [1,2].forEach(p=>{
+  [1,2].forEach(p=>{
+  if(cmOpp==="net"&&p!==cmColor)return;
   const bot=cmOpp==="bb"||(cmOpp==="bot"&&cmColor!==p);
   row("Campeão "+NAMES[p]+(bot?" (bot)":"")+":",[["","Aleatório"]].concat(ks.map(k=>[k,TYPES[k].name])).map(([v,t])=>btn(t,cmChamp[p]===v,()=>{cmChamp[p]=v;render();})));
   if(cmTeam[p]==="ia"&&!bot)cmTeam[p]="A";
@@ -1527,6 +1538,7 @@ function renderClassicOpts(){
    TK.map(k=>[k,teamTxt(k)]).concat([["rnd","Aleatório"]],bot?[["ia","IA define (campeões)"]]:[]).forEach(([v,t])=>{const b=btn(t,cmTeam[p]===v,()=>{cmTeam[p]=v;cmTeamOpen[p]=false;render();});b.style.cssText="padding:3px 8px;font-size:.8rem";d.appendChild(b);});
    o.appendChild(d);}
  });
+ if(cmOpp==="net"&&typeof cnRow==="function")o.appendChild(cnRow());
 }
 function renderClassicOpts2(){
  const o=$("clOpts");
@@ -1619,6 +1631,7 @@ function clsSim(N){
  chunk();
 }
 function startClassic(){
+ if(cmOpp==="net"&&!window.__cnBuilding){cnCreate();return;}
  const vs=cmOpp==="bb"?{1:"b",2:"b"}:cmOpp==="bot"?{1:cmColor===1?"h":"b",2:cmColor===2?"h":"b"}:{1:"h",2:"h"};
  const ks=Object.keys(TYPES).filter(k=>TYPES[k].champ&&!TYPES[k].noPlace);
  MP={vs,turn:1+randInt(2),roll:0,pips:0,rolled:false,sel:null,sp:{soldier:0,archer:0,guardian:0,c:0},groups:[],nid:1,log:[],over:false,winner:0,t:0,turnN:1,visited:{},bhp:{1:3,2:3},chp:{},cmax:{},cdead:{},campUsed:{},giant:{hp:2,dead:false,eng:null,rolling:false,face:0},dragon:{hp:5,dead:false,eng:null,rolling:false,face:0},heart:{1:false,2:false},ctype:{},fort:{sold:2,arch:1,dead:false,eng:null},bts:[],dagger:{1:false,2:false},act:null,pend:null,msg:""};
@@ -1951,14 +1964,15 @@ function mapRandObs(n){obstacles=[];for(let i=0;i<n;i++)obstacles.push({x:randIn
 function startMapBattle(ag,dg,node){
  if(MP.idle){MP.idle[1]=MP.idle[2]=0;MP.force=0;}
  const att=ag[0].o,def=3-att,cm=gs=>{const r={u:{soldier:0,archer:0,guardian:0},c:null,und:0};gs.forEach(h=>{MUT.forEach(t=>{r.u[t]+=h.u[t];});r.und+=h.und||0;if(h.c)r.c=h.c;});return r;};
- const baseOwner=node===MAPD.b[1]?1:node===MAPD.b[2]?2:0,human=o=>MP.vs[o]==="h",n=1+randInt(2);
- mapB={att,def,node,gs:[...ag,...dg],comp:{[att]:cm(ag),[def]:cm(dg)},lay:{},queue:[1,2].filter(human),obsPick:0,picker:0,passed:false};
+ const baseOwner=node===MAPD.b[1]?1:node===MAPD.b[2]?2:0,human=o=>MP.vs[o]==="h"||MP.vs[o]==="r",n=1+randInt(2);
+ mapB={att,def,node,gs:[...ag,...dg],comp:{[att]:cm(ag),[def]:cm(dg)},lay:{},queue:MP.net?[]:[1,2].filter(human),obsPick:0,picker:0,passed:false};
  obstacles=[];
  if(baseOwner&&human(baseOwner)){mapB.obsPick=n;mapB.picker=baseOwner;mapB.obsTotal=n;mapB.obsAdj=true;}else mapRandObs(n);
- clearTimeout(MP.t);mapBattleStage();
+ clearTimeout(MP.t);if(MP.net){cnBattleBegin(mapB);return;}mapBattleStage();
 }
 function mapBattleStage(){
  const B=mapB;
+ if(MP.net&&!B.reinf){cnStage();return;}
  if(B.obsAdj){myTeam=B.picker;flip=myTeam===2;adir=null;armyStart=true;brushA="soldier";myArmy=[];mode="army";render();return;}
  if(B.queue.length){
   const o=B.queue[0];
@@ -2015,12 +2029,13 @@ function reinfMark(){
   if(a===0&&d===0&&!cell.firstChild){const e=pEl(TYPES[c.t].champ?c.t:c.t,c.o,Math.min(44,34*s),9);e.style.opacity=".75";cell.appendChild(e);}}});
 }
 function mapArmyReady(){
- if(mapB&&mapB.obsAdj){if(mapB.obsPick>0){$("armyMsg").textContent="Posicione todos os obstáculos.";return;}mapB.obsAdj=false;mapBattleStage();return;}
+ if(mapB&&mapB.obsAdj){if(mapB.obsPick>0){$("armyMsg").textContent="Posicione todos os obstáculos.";return;}mapB.obsAdj=false;if(MP.net)cnObsDone();mapBattleStage();return;}
  if(mapB&&mapB.reinf){const m=$("armyMsg"),need=armyNeed();if(myArmy.length<need){m.textContent="Posicione todas as "+need+" peças que chegam.";return;}
   const g=mapB.g,bt=mapB.bt,L=myArmy.map(a=>({t:a.t,x:a.x,y:a.y,f:a.f}));reinfFinish(g,bt,L);return;}
  const m=$("armyMsg"),need=armyNeed();
  if(myArmy.length<need){m.textContent="Posicione todas as "+need+" peças do exército.";return;}
  mapB.lay[myTeam]=myArmy.map(a=>({t:a.t,o:myTeam,x:a.x,y:a.y,f:a.f}));
+ if(MP.net){cnMyReady();return;}
  mapBattleStage();
 }
 function armyNeed(){return armyLimV?MUT.reduce((s,t)=>s+armyLimV[t],0)+(armyChampV?1:0):12+(myArmy.some(q=>q.t==="muntasir")?MUX.s+MUX.g:0);}
@@ -2031,9 +2046,10 @@ function undPlace(o,n,occ){const taken=new Set(),inZ=y=>o===1?y>=5:y<=4,rk=y=>o=
  cs.sort((a,b)=>b.w-a.w);for(let i=0;i<n&&i<cs.length;i++)out.push({t:"undead",o,x:cs[i].x,y:cs[i].y});return out;}
 function mapBattleGo(){
  const B=mapB,L=[];
- [1,2].forEach(o=>{if(MP.vs[o]==="h")L.push(...B.lay[o]);else L.push(...mapAutoPlace(o,B.comp[o].u,B.comp[o].c,undefined,B.comp[3-o].c));});
+ [1,2].forEach(o=>{if(MP.vs[o]==="h"||MP.vs[o]==="r")L.push(...B.lay[o]);else L.push(...mapAutoPlace(o,B.comp[o].u,B.comp[o].c,undefined,B.comp[3-o].c));});
  [1,2].forEach(o=>{const n=B.comp[o].und||0;if(n)L.push(...undPlace(o,n,L.map(l=>({x:l.x,y:l.y,s:sz(l.t)}))));});
  // monta o tabuleiro inicial, guarda e volta ao mapa: a batalha fica em espera
+ if(MP.net&&B.remoteMu)obstacles=obstacles.filter(k=>!B.remoteMu.some(m=>m.mu===k.mu)).concat(B.remoteMu);
  fires=[];syM=null;board=Array(N*N).fill(null);layout=L;lastL=L;
  L.forEach(l=>put(mk(l.t,l.o,l.x,l.y,l.f)));muFinish(L);placeObstacles();
  const seen=new Set();board.forEach(p=>{if(p&&!p.obs&&!seen.has(p)){seen.add(p);if(TYPES[p.t].champ&&MP.chp[p.o]>0)p.hp=MP.chp[p.o];}});
@@ -2097,7 +2113,7 @@ function mapOpenBT(bt){
  logs=S.lg.slice();turnN=S.n;turn=MP.turn;acts=3;over=false;winner=0;sel=null;fury=false;revive=false;busy=false;turnWho=[];extraUsed=false;lockP=null;aiLast=null;hkActed=false;learned=false;rolls=[0,0,0,0,0,0,0];ver++;
  $("dice").textContent="";curBT=bt;bt.ver0=ver;dagger=MP.dagger;
  const botO=[1,2].find(o=>MP.vs[o]==="b")||0;
- const both=MP.vs[1]==="b"&&MP.vs[2]==="b";aiTeam=both?3:botO;formMode=0;armyStart=true;lab=false;online=null;flip=both?false:botO?botO===1:false;lastL=layout;
+ const both=MP.vs[1]==="b"&&MP.vs[2]==="b";aiTeam=both?3:botO;formMode=0;armyStart=true;lab=false;online=null;flip=MP.net?MP.net.seat===2:both?false:botO?botO===1:false;lastL=layout;
  mode="play";log("Turno do "+NAMES[turn]+" na batalha em "+mNode(bt.node,turn)+".");render();if(bot)botShow("board");
 }
 // Fim do turno na batalha: guarda o tabuleiro e volta ao mapa passando a vez.
@@ -2118,10 +2134,10 @@ $("backMap").onclick=mapCloseBT;
 $("mAtk").onclick=()=>{if(mHuman())mapAttackBase();};
 $("mFight").onclick=()=>{if(mHuman())mapFightBase();};
 $("mHeal").onclick=()=>{if(mHuman())mapHeal();};
-$("mSplitGo").onclick=mapSplit;
-$("mMerge").onclick=mapMerge;
-$("mMenu").onclick=toMenu;
-$("mAgain").onclick=toMenu;
+$("mSplitGo").onclick=()=>{if(mHuman())mapSplit();};
+$("mMerge").onclick=()=>{if(mHuman())mapMerge();};
+$("mMenu").onclick=()=>toMenu();
+$("mAgain").onclick=()=>toMenu();
 $("passGo").onclick=()=>{if(mapB){mode="army";mapB.passed=true;mapBattleStage();}};
 $("clGo").onclick=startClassic;
 
@@ -2391,7 +2407,7 @@ function drawPreview(){
  flip=false;const bb=document.querySelector(".bb");bb.classList.remove("flip");document.body.classList.remove("flipped");labels();
  $("vx").innerHTML="";$("fx").innerHTML="";
  const bt=pvBT(),svB=board,svO=obstacles,svC=corpses,svS=sel,svH=heartSpot,svF=fury,svR=revive;
- const vw=MP.vs[MP.turn]==="h"?MP.turn:(MP.vs[1]==="h"?1:2);
+ const vw=MP.net?MP.net.seat:MP.vs[MP.turn]==="h"?MP.turn:(MP.vs[1]==="h"?1:2);
  if(bt){loadBT(bt.snap,bt.seen?0:vw);heartSpot=bt.hs||{1:null,2:null};}else{board=Array(N*N).fill(null);obstacles=[];corpses=[];heartSpot={1:null,2:null};}
  sel=null;fury=false;revive=false;
  const go=!!bt&&bt.gs.some(h=>h.o===MP.turn)&&mHuman()&&!MP.over&&mFree();
@@ -2716,7 +2732,15 @@ function muSet(x,y){
  if(!muCorr(base.concat({x,y}))){m.textContent="O obstáculo bloquearia o corredor mínimo de 2 casas.";return;}
  obstacles=base.concat({x,y,mu:o});m.textContent="";
 }
-function muSync(){if(typeof myTeam!=="undefined"&&obstacles.some(k=>k.mu===myTeam)&&!myArmy.some(q=>q.t==="muntasir"))obstacles=obstacles.filter(k=>k.mu!==myTeam);}
+function muSync(){
+ if(typeof myTeam==="undefined")return;
+ if(obstacles.some(k=>k.mu===myTeam)&&!myArmy.some(q=>q.t==="muntasir"))obstacles=obstacles.filter(k=>k.mu!==myTeam);
+ if(typeof armyLimV!=="undefined"&&armyLimV)return;
+ if(myArmy.some(q=>q.t==="muntasir"))return;
+ const L={archer:3,soldier:6,guardian:2};let cut=0;
+ Object.keys(L).forEach(t=>{let n=0;myArmy=myArmy.filter(q=>{if(q.t!==t)return true;if(++n<=L[t])return true;cut++;return false;});});
+ if(cut){const e=$("armyMsg");if(e)e.textContent="Sem o Muntasir, o exército volta ao limite normal: "+cut+" peça(s) extra(s) removida(s).";}
+}
 // no início da batalha: valida/ajusta (ou sorteia, para bot) o obstáculo extra de cada Muntasir
 function muFinish(L){
  [1,2].forEach(o=>{
@@ -3058,6 +3082,220 @@ function qbSim(){
  box.querySelectorAll("option").forEach(o=>{o.firstChild.__t=o.firstChild.data;});
  if(LG!=="pt")setLang(LG);
 })();
+
+
+// ===== Trévia Clássico online (salas) — só no build independente (usa TreviaRoom, em room-provider.js) =====
+// Modelo: cada jogador roda o motor do mapa localmente. Quem tem a vez ("ativo") joga e, a cada mudança, envia o estado
+// completo do mapa (cmp). O outro ("passivo") só recebe e mostra. O fim do turno passa a autoridade para o outro.
+// Batalhas: quando dois exércitos se encontram, os dois posicionam as peças ao mesmo tempo e em segredo (bstart/bready/blay);
+// o jogador ativo monta a batalha e o estado resultante segue no cmp. Cada turno de batalha é jogado por quem tem a vez.
+let NET=null;
+const CN_SKIP={vs:1,net:1,t:1,sel:1,sp:1,rolling:1,msg:1};
+function cnSer(){
+ const gs=new Set(MP.groups);
+ return JSON.stringify(MP,function(k,v){
+  if(this===MP&&CN_SKIP[k])return undefined;
+  if(v&&typeof v==="object"&&!Array.isArray(v)&&gs.has(v)&&this!==MP.groups)return{$g:v.id};
+  return v;});
+}
+function cnDe(str){
+ const P=JSON.parse(str),by=new Map();P.groups.forEach(g=>by.set(g.id,g));
+ const fix=o=>{if(!o||typeof o!=="object")return o;
+  if(Array.isArray(o)){for(let i=0;i<o.length;i++){const v=o[i];o[i]=(v&&typeof v==="object"&&v.$g!==undefined)?by.get(v.$g)||null:fix(v);}return o;}
+  for(const k in o){const v=o[k];o[k]=(v&&typeof v==="object"&&!Array.isArray(v)&&v.$g!==undefined)?by.get(v.$g)||null:fix(v);}return o;};
+ P.groups.forEach(g=>{for(const k in g){const v=g[k];if(v&&typeof v==="object")fix(v);}});
+ for(const k in P){if(k==="groups")continue;const v=P[k];if(v&&typeof v==="object"&&!Array.isArray(v)&&v.$g!==undefined)P[k]=by.get(v.$g)||null;else P[k]=fix(v);}
+ return P;
+}
+function cnSend(d){if(!NET||!NET.room)return;NET.room.send("t",d).catch(()=>{});}
+function cnHide(){const e=$("netNote");if(e)e.hidden=true;const o=$("cnOv");if(o)o.hidden=true;}
+function cnOv(text,cancel,extra){
+ let o=$("cnOv");
+ if(!o){o=document.createElement("div");o.id="cnOv";o.setAttribute("role","dialog");o.style.cssText="position:fixed;inset:0;z-index:80;background:#000a;display:flex;align-items:center;justify-content:center;padding:16px";document.body.appendChild(o);}
+ o.hidden=false;o.innerHTML="";
+ const b=document.createElement("div");b.style.cssText="background:var(--bg,#fff);color:var(--fg,#111);border:1px solid var(--ln,#0003);border-radius:12px;padding:16px;max-width:420px;width:100%;display:flex;flex-direction:column;gap:10px;word-break:break-word";
+ const p=document.createElement("div");p.textContent=text;b.appendChild(p);
+ if(extra)b.appendChild(extra);
+ if(cancel){const c=document.createElement("button");c.className="b";c.textContent="Cancelar";c.onclick=()=>{cnLeave();toMenu();};b.appendChild(c);}
+ o.appendChild(b);
+}
+function cnWait(t){if(typeof netNote==="function")netNote(t,true);}
+function cnLeave(){
+ if(!NET)return;
+ clearInterval(NET.ka);const r=NET.room;NET=null;
+ try{r&&r.leave();}catch(e){}
+ if(MP&&MP.net){clearTimeout(MP.t);MP=null;}
+ mapB=null;armyLimV=armyChampV=null;myArmy=[];cnHide();
+}
+const cnH={onMessage:m=>{if(cnOn(m))return;if(typeof onMsg==="function")onMsg(m);},
+ onPeerLeave:id=>{if(NET)cnPeerLeave(id);else if(typeof netPeerLeave==="function")netPeerLeave(id);},
+ onStatus:st=>{if(NET)cnStatus(st);else if(typeof netStatus==="function")netStatus(st);}};
+function cnNew(room,host,seat){
+ NET={room,code:room.code,me:room.peerId,host,seat,peer:null,peerGone:false,v:0,act:false,last:"",lastMsg:null};
+ NET.ka=setInterval(cnKeep,3000);return NET;
+}
+async function cnCreate(){
+ if(!window.TreviaRoom||!TreviaRoom.isConfigured()){cnOv("Salas online não estão configuradas neste site.");setTimeout(()=>{const o=$("cnOv");if(o)o.hidden=true;},2500);return;}
+ cnLeave();cnOv("Criando sala…",true);
+ try{
+  const room=await TreviaRoom.createRoom(cnH);
+  cnNew(room,true,cmColor);
+  try{location.hash=room.code;}catch(e){}
+  try{navigator.clipboard.writeText(room.link);}catch(e){}
+  const inp=document.createElement("input");inp.readOnly=true;inp.value=room.link;inp.style.cssText="font:inherit;padding:8px;border-radius:8px;border:1px solid var(--ln,#0003);background:var(--bg,#fff);color:var(--fg,#111)";inp.onfocus=()=>inp.select();
+  cnOv("Sala criada (você joga de "+NAMES[cmColor]+"). Envie este link ao adversário e aguarde ele entrar:",true,inp);
+ }catch(e){cnOv("Não consegui criar a sala ("+((e&&e.code)||"erro")+").",true);}
+}
+async function cnJoin(txt){
+ if(!window.TreviaRoom||!TreviaRoom.isConfigured()){cnOv("Salas online não estão configuradas neste site.",true);return;}
+ const code=TreviaRoom.parseCode(txt);if(!code){cnOv("Código inválido.",true);return;}
+ cnLeave();cnOv("Entrando na sala…",true);
+ try{
+  const room=await TreviaRoom.joinRoom(code,cnH);
+  cnNew(room,false,0);cnHello();
+  cnOv("Conectado. Aguardando o anfitrião iniciar a partida…",true);
+ }catch(e){NET=null;cnOv("Não consegui entrar na sala ("+((e&&e.code)||"erro")+").",true);}
+}
+function cnHello(){if(NET&&!NET.host)cnSend({k:"chello",need:!MP,champ:cmChamp[cmColor]||"",team:cmTeam[cmColor]||"A"});}
+function cnRow(){
+ if(!window.__cnRow){
+  const d=document.createElement("div");d.className="row";
+  const i=document.createElement("input");i.id="clCode";i.placeholder="código ou link da sala (para entrar)";i.maxLength=300;i.setAttribute("aria-label","Código ou link da sala");
+  i.style.cssText="font:inherit;padding:8px;border-radius:8px;border:1px solid var(--ln);background:var(--bg);color:var(--fg);flex:1;min-width:0";
+  const b=document.createElement("button");b.className="b";b.textContent="Entrar na sala";b.onclick=()=>cnJoin(i.value);
+  d.appendChild(i);d.appendChild(b);window.__cnRow=d;}
+ return window.__cnRow;
+}
+// ---- mensagens ----
+function cnOn(m){
+ const d=m.data;if(!d)return false;
+ if(!NET){
+  if(d.k==="cmode"&&typeof online!=="undefined"&&online&&d.to===online.me){ // convidado entrou por link e a sala é do Clássico
+   const rm=online.room;if(!rm)return true;online=null;gm="classic";cmOpp="net";mode="lobby";
+   cnNew(rm,false,0);NET.peer=m.peer;cnHello();render();cnOv("Conectado. Aguardando o anfitrião iniciar a partida…",true);return true;}
+  return false;}
+ if(d.to&&d.to!==NET.me)return true;
+ if(NET.host){
+  if(d.k==="hello"){if(!NET.peer||NET.peer===m.peer||NET.peerGone){NET.peer=m.peer;cnSend({k:"cmode",to:m.peer});}else cnSend({k:"full",to:m.peer});return true;}
+  if(d.k==="chello"){
+   if(NET.peer&&NET.peer!==m.peer&&!NET.peerGone){cnSend({k:"full",to:m.peer});return true;}
+   NET.peer=m.peer;NET.peerGone=false;cnHide();
+   if(MP&&MP.net){if(d.need)cnSend({k:"cstate",to:m.peer,seat:3-NET.seat,v:NET.v,S:cnSer(),f:1});}
+   else cnBuild(d);
+   return true;}
+ }
+ if(d.k==="full"){cnLeave();toMenu();cnOv("Sala cheia.");setTimeout(()=>{const o=$("cnOv");if(o)o.hidden=true;},2500);return true;}
+ if(d.k==="cstate"){if(m.peer)NET.peer=m.peer;NET.seat=d.seat;cnApply(d,!!d.f||!MP);return true;}
+ if(d.k==="cmp"){cnApply(d,false);return true;}
+ if(d.k==="bstart"){cnBStart(d);return true;}
+ if(d.k==="bobs"){const B=mapB;if(B&&B.bid===d.bid&&B.obsAdj){obstacles=d.ob.map(a=>({x:a[0],y:a[1]}));B.obsAdj=false;cnStage();}return true;}
+ if(d.k==="bready"){const B=mapB;if(B&&B.bid===d.bid){B.ready[d.s]=true;cnBMaybe();}return true;}
+ if(d.k==="blay"){const B=mapB;if(B&&B.bid===d.bid){B.lay[d.s]=d.L;B.got=B.got||{};B.got[d.s]=true;B.remoteMu=d.mu||[];cnBMaybe();}return true;}
+ return /^[cb]/.test(d.k||"");
+}
+function cnPeerLeave(id){
+ if(!NET)return;
+ if(id===NET.peer){NET.peerGone=true;if(typeof netNote==="function")netNote(NET.host?"O adversário desconectou. Aguardando ele voltar…":"O anfitrião desconectou. Aguardando…",true);}
+}
+function cnStatus(st){
+ if(!NET)return;
+ if(st==="disconnected"){if(typeof netNote==="function")netNote("Conexão perdida. Tentando reconectar…",true);}
+ else if(st==="reconnected"){if(typeof netNote==="function")netNote("Reconectado.");cnHello();cnKeep();}
+}
+function cnKeep(){
+ if(!NET)return;
+ if(!NET.host&&!MP)cnHello();
+ if(NET.lastMsg)cnSend(NET.lastMsg);
+ const B=mapB;if(B&&MP&&MP.net&&!B.reinf){
+  if(B.act)cnSend({k:"bstart",bid:B.bid,v0:B.v0,att:B.att,def:B.def,node:B.node,comp:B.comp,ob:obstacles.map(o=>[o.x,o.y]),obsPick:B.obsPick,picker:B.picker,obsTotal:B.obsTotal,obsAdj:B.obsAdj});
+  const s=NET.seat;
+  if(B.obsDone)cnSend({k:"bobs",bid:B.bid,ob:B.obsDone});
+  if(B.ready[s])cnSend({k:"bready",bid:B.bid,s});
+  if(B.sentLay)cnSend({k:"blay",bid:B.bid,s,L:B.lay[s],mu:B.myMu||[]});
+ }
+}
+// ---- início e sincronização do mapa ----
+function cnBuild(cfg){
+ const hs=NET.seat,gs=3-hs,o0=cmOpp,c0=cmChamp[gs],t0=cmTeam[gs];
+ cmChamp[gs]=(cfg.champ&&TYPES[cfg.champ]&&TYPES[cfg.champ].champ&&!TYPES[cfg.champ].noPlace)?cfg.champ:"";
+ cmTeam[gs]=(TEAMS[cfg.team]||cfg.team==="rnd")?cfg.team:"A";
+ if(cmTeam[hs]==="ia")cmTeam[hs]="A";
+ cmOpp="2p";window.__cnBuilding=true;
+ try{startClassic();}finally{window.__cnBuilding=false;cmOpp=o0;cmChamp[gs]=c0;cmTeam[gs]=t0;}
+ MP.vs={};MP.vs[hs]="h";MP.vs[gs]="r";MP.net=NET;
+ NET.v=1;NET.act=MP.turn===hs;NET.last=cnSer();
+ NET.lastMsg={k:"cstate",to:NET.peer,seat:gs,v:1,S:NET.last};cnSend(NET.lastMsg);
+ cnHide();if(NET.act)mapSelFirst();render();
+}
+function cnApply(d,force){
+ if(!NET)return;
+ if(!force&&d.v<=NET.v)return;
+ if(!force&&mapB&&!mapB.reinf&&d.v<=(mapB.v0||0))return;
+ const P=cnDe(d.S),seat=NET.seat;
+ P.vs={};P.vs[seat]="h";P.vs[3-seat]="r";P.net=NET;P.rolling=false;P.t=0;
+ ["giant","dragon","fort"].forEach(k=>{if(P[k])P[k].rolling=false;});
+ P.sel=null;P.sp={soldier:0,archer:0,guardian:0,c:0};
+ if(MP)clearTimeout(MP.t);
+ MP=P;NET.v=d.v;NET.lastMsg=null;
+ mapB=null;armyLimV=armyChampV=null;myArmy=[];obstacles=[];curBT=null;board=Array(N*N).fill(null);
+ mode="map";userFoc=foc="map";gm="classic";
+ NET.last=cnSer();NET.act=P.turn===seat&&!P.over;
+ if(NET.act)mapSelFirst();
+ cnHide();
+ render();
+}
+let _cnT=0;
+function cnFlush(){
+ _cnT=0;
+ if(!NET||!MP||!MP.net||!NET.act)return;
+ if(mapB||(mode!=="map"&&!MP.over))return;
+ if(MP.rolling||(MP.giant&&MP.giant.rolling)||(MP.dragon&&MP.dragon.rolling)||(MP.fort&&MP.fort.rolling))return;
+ const s=cnSer();if(s===NET.last)return;
+ NET.v++;NET.last=s;NET.lastMsg={k:"cmp",v:NET.v,S:s};cnSend(NET.lastMsg);
+ if(MP.turn!==NET.seat||MP.over)NET.act=false;
+}
+{const _r=render;render=function(){const r=_r.apply(this,arguments);if(NET&&MP&&MP.net&&!_cnT)_cnT=setTimeout(cnFlush,120);return r;};}
+{const _tm=toMenu;toMenu=function(){cnLeave();return _tm.apply(this,arguments);};}
+// ---- batalha online: posicionamento paralelo e secreto ----
+function cnBattleBegin(B){
+ B.bid=Date.now()+"."+Math.random().toString(36).slice(2,6);B.v0=NET.v;B.act=true;B.ready={1:false,2:false};B.placed=false;
+ cnSend({k:"bstart",bid:B.bid,v0:B.v0,att:B.att,def:B.def,node:B.node,comp:B.comp,ob:obstacles.map(o=>[o.x,o.y]),obsPick:B.obsPick,picker:B.picker,obsTotal:B.obsTotal,obsAdj:B.obsAdj});
+ cnStage();
+}
+function cnBStart(d){
+ if(!MP||!MP.net)return;
+ if(mapB&&mapB.bid===d.bid)return;
+ if(mapB&&!mapB.reinf&&d.v0<(mapB.v0||0))return;
+ mapB={bid:d.bid,v0:d.v0,att:d.att,def:d.def,node:d.node,gs:[],comp:d.comp,lay:{},queue:[],obsPick:d.obsPick,picker:d.picker,obsTotal:d.obsTotal,obsAdj:d.obsAdj,passed:false,ready:{1:false,2:false},act:false,placed:false};
+ obstacles=d.ob.map(a=>({x:a[0],y:a[1]}));
+ cnStage();
+}
+function cnStage(){
+ const B=mapB,s=NET.seat;
+ if(B.obsAdj){
+  if(B.picker===s){cnHide();myTeam=s;flip=s===2;adir=null;armyStart=true;brushA="soldier";myArmy=[];mode="army";render();return;}
+  mode="map";cnWait("Aguardando "+NAMES[B.picker]+" posicionar os obstáculos…");render();return;}
+ if(!B.placed){B.placed=true;cnHide();myTeam=s;flip=s===2;adir=null;armyStart=true;armyLimV={...B.comp[s].u};armyChampV=B.comp[s].c;myArmy=[];
+  brushA=MUT.find(t=>armyLimV[t]>0)||armyChampV||"soldier";mode="army";render();return;}
+ mode="map";cnWait("Peças posicionadas. Aguardando o adversário…");render();
+}
+function cnObsDone(){
+ const B=mapB;B.obsDone=obstacles.map(o=>[o.x,o.y]);cnSend({k:"bobs",bid:B.bid,ob:B.obsDone});
+}
+function cnMyReady(){
+ const B=mapB,s=NET.seat;
+ B.ready[s]=true;B.myMu=obstacles.filter(k=>k.mu===s).map(k=>({x:k.x,y:k.y,mu:k.mu}));
+ armyLimV=armyChampV=null;myArmy=[];
+ cnSend({k:"bready",bid:B.bid,s});
+ cnStage();cnBMaybe();
+}
+function cnBMaybe(){
+ const B=mapB;if(!B||!MP||!MP.net)return;
+ if(!(B.ready[1]&&B.ready[2]))return;
+ const s=NET.seat,o=3-s;
+ if(!B.sentLay){B.sentLay=true;cnSend({k:"blay",bid:B.bid,s,L:B.lay[s],mu:B.myMu||[]});}
+ if(B.act&&B.got&&B.got[o]&&B.lay[s]){cnHide();B.picker0=0;mapBattleGo();}
+}
 
 layout=defaultLayout();render();
 </script>
