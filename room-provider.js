@@ -18,6 +18,7 @@
  *   TreviaRoom.buildLink(codigo)         -> string          (link para compartilhar)
  *   TreviaRoom.createRoom(handlers)      -> Promise<Room>   (gera um código novo e entra)
  *   TreviaRoom.joinRoom(codigoOuLink, handlers) -> Promise<Room>
+ *   TreviaRoom.openLobby({onList(lista), onStatus})  -> Promise<Lobby>  (lista de salas abertas; Lobby: list(), advertise({code,mode,name}), unadvertise(), leave())
  *
  *   handlers (todos opcionais):
  *     onMessage({ data, peer, topic })   mensagem recebida de outro participante
@@ -189,13 +190,77 @@
 
   function createRoom(handlers) { return joinRoom(generateCode(), handlers); }
 
+  // ---- Lobby público: lista de salas abertas (só Presence; nada é gravado em banco) ----
+  // Quem espera adversário publica {code, mode, name, at} no canal "trevia-lobby-v1"; quem abre a lista só observa.
+  // O anúncio some sozinho quando a pessoa fecha a página ou perde a conexão (Presence). O código das salas anunciadas é público.
+  var LOBBY_CHANNEL = CHANNEL_PREFIX + "lobby-v1";
+  async function openLobby(handlers) {
+    handlers = handlers || {};
+    if (!isConfigured()) throw fail("not-configured", "Salas online não configuradas");
+    var client = await getClient();
+    var peerId = randomString(10, "abcdefghijklmnopqrstuvwxyz0123456789");
+    var channel = client.channel(LOBBY_CHANNEL, { config: { presence: { key: peerId } } });
+    var left = false, settled = false, wasDown = false, ad = null;
+    function list() {
+      var st = {}; try { st = channel.presenceState() || {}; } catch (e) {}
+      var out = [];
+      Object.keys(st).forEach(function (k) {
+        if (k === peerId) return;
+        (st[k] || []).forEach(function (m) {
+          var a = m && m.ad;
+          if (!a || typeof a.code !== "string" || !/^[a-z0-9]{3,12}$/.test(a.code)) return;
+          out.push({ peer: k, code: a.code, mode: a.mode === "quick" ? "quick" : "classic",
+                     name: String(a.name || "").slice(0, 20), at: Number(a.at) || 0 });
+        });
+      });
+      out.sort(function (x, y) { return y.at - x.at; });
+      return out.slice(0, 50);
+    }
+    function emit() { if (left) return; try { if (handlers.onList) handlers.onList(list()); } catch (e) { console.error("[room-provider]", e); } }
+    channel.on("presence", { event: "sync" }, emit);
+    function track() { if (ad) { try { return Promise.resolve(channel.track({ ad: ad })); } catch (e) {} } return Promise.resolve(); }
+    function onHide() { lobby.leave(); }
+    var lobby = {
+      peerId: peerId,
+      list: list,
+      advertise: function (a) { ad = { code: String(a.code), mode: a.mode === "quick" ? "quick" : "classic", name: String(a.name || "").slice(0, 20), at: Date.now() }; return left ? Promise.resolve() : track(); },
+      unadvertise: function () { ad = null; if (left) return Promise.resolve(); try { return Promise.resolve(channel.untrack()); } catch (e) { return Promise.resolve(); } },
+      leave: function () {
+        if (left) return; left = true; ad = null;
+        try { global.removeEventListener("pagehide", onHide); } catch (e) {}
+        try { channel.untrack(); } catch (e) {}
+        try { client.removeChannel(channel); } catch (e) { try { channel.unsubscribe(); } catch (e2) {} }
+      }
+    };
+    await new Promise(function (resolve, reject) {
+      var timer = setTimeout(function () {
+        if (settled) return; settled = true; lobby.leave();
+        reject(fail("connect-failed", "Tempo esgotado ao conectar"));
+      }, CONNECT_TIMEOUT_MS);
+      channel.subscribe(function (status) {
+        if (left) return;
+        if (status === "SUBSCRIBED") {
+          track();
+          if (!settled) { settled = true; clearTimeout(timer); resolve(); }
+          else if (wasDown) { wasDown = false; if (handlers.onStatus) try { handlers.onStatus("reconnected"); } catch (e) {} emit(); }
+        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+          if (!settled) { settled = true; clearTimeout(timer); lobby.leave(); reject(fail("connect-failed", String(status))); }
+          else if (!wasDown) { wasDown = true; if (handlers.onStatus) try { handlers.onStatus("disconnected"); } catch (e) {} }
+        }
+      });
+    });
+    global.addEventListener("pagehide", onHide);
+    return lobby;
+  }
+
   global.TreviaRoom = {
-    version: "1.0.0",
+    version: "1.1.0",
     isConfigured: isConfigured,
     generateCode: generateCode,
     parseCode: parseCode,
     buildLink: buildLink,
     createRoom: createRoom,
-    joinRoom: joinRoom
+    joinRoom: joinRoom,
+    openLobby: openLobby
   };
 })(typeof window !== "undefined" ? window : this);
