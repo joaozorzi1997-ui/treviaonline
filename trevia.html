@@ -1374,7 +1374,7 @@ $("rot").onclick=()=>{flip=!flip;render();};
 $("heal").onclick=()=>{if(!locked())doHeal();};
 $("mount").onclick=()=>{if(!locked())doMount();};
 $("ritual").onclick=()=>{if(locked())return;revive=!revive;ritual=revive;fury=false;render();};
-{const h=location.hash.replace("#","");if(/^[a-z0-9]{3,12}$/.test(h))setTimeout(()=>joinRoom(h,false),700);}
+{const h=location.hash.replace("#","");if(/^[a-z0-9]{3,12}$/.test(h))setTimeout(()=>{if(!(typeof cnSess==="function"&&cnSess(h)))joinRoom(h,false);},700);}
 $("fury").onclick=()=>{if(locked())return;fury=!fury;revive=false;shuri=false;render();};
 $("shuri").onclick=()=>{if(locked())return;shuri=!shuri;fury=false;revive=false;render();};
 $("spd").onclick=()=>{aiFast=!aiFast;render();};
@@ -2554,8 +2554,8 @@ function swapView(){
 function pvList(){return MP?MP.bts:[];}
 function pvBT(){const l=pvList();if(!l.length)return MP.lastEnd||null;let b=l.find(x=>x.id===pvId);if(!b){b=l.find(x=>x.gs.some(h=>h.o===MP.turn))||l[0];pvId=b.id;}return b;}
 function drawPreview(){
- flip=false;const bb=document.querySelector(".bb");bb.classList.remove("flip");document.body.classList.remove("flipped");labels();
- $("vx").innerHTML="";$("fx").innerHTML="";
+ flip=!!(MP&&MP.net&&MP.net.seat===2);const bb=document.querySelector(".bb");bb.classList.toggle("flip",flip);document.body.classList.toggle("flipped",flip);labels();
+ $("vx").innerHTML="";if(!(window._fxUntil>Date.now()))$("fx").innerHTML="";
  const bt=pvBT(),svB=board,svO=obstacles,svC=corpses,svS=sel,svH=heartSpot,svF=fury,svR=revive;
  const vw=MP.net?MP.net.seat:MP.vs[MP.turn]==="h"?MP.turn:(MP.vs[1]==="h"?1:2);
  if(bt){loadBT(bt.snap,bt.seen?0:vw);heartSpot=bt.hs||{1:null,2:null};}else{board=Array(N*N).fill(null);obstacles=[];corpses=[];heartSpot={1:null,2:null};}
@@ -2868,7 +2868,7 @@ function obsSkin(c,x,y){c.style.removeProperty("background-position");const k=ob
   if(el._k!==key){el.textContent=x;its.forEach(([n,t])=>{const s=document.createElement("span");s.className="it itm it-"+n;s.title=t;el.appendChild(s);});el._k=key;}
   if(el.className!==k)el.className=k;el.style.visibility="visible";};
  window.tbUpdate=function(){try{bw.classList.toggle("tbOn",!!(MP&&MP.team));if(!(MP&&MP.ctype&&MP.team&&(mode==="play"||mode==="army"||(mode==="map"&&foc==="board")))){top.style.visibility=bot.style.visibility="hidden";return;}
-  const fl=(mode==="map"?false:flip);fill(top,fl?1:2);fill(bot,fl?2:1);}catch(e){top.style.visibility=bot.style.visibility="hidden";}};
+  const fl=(mode==="map"?!!(MP.net&&foc==="board"&&MP.net.seat===2):flip);fill(top,fl?1:2);fill(bot,fl?2:1);}catch(e){top.style.visibility=bot.style.visibility="hidden";}};
  const r0=render;render=function(){const x=r0.apply(this,arguments);tbUpdate();autoBack();return x;};})();
 // Fim da batalha: volta ao mapa sozinho após 5 s (ou antes, no botão "Voltar ao mapa")
 function autoBack(){
@@ -3929,8 +3929,24 @@ function cnOv(text,cancel,extra){
  o.appendChild(b);
 }
 function cnWait(t){if(typeof netNote==="function")netNote(t,true);}
+// ---- retomar a partida ao atualizar o navegador: o link da sala fica vinculado à partida ----
+const CN_SK="trvCnSess";
+function cnSessGet(){try{const s=JSON.parse(sessionStorage.getItem(CN_SK)||"null");return s&&s.code&&s.S&&Date.now()-s.t<864e5?s:null;}catch(e){return null;}}
+function cnSessClear(){try{sessionStorage.removeItem(CN_SK);}catch(e){}}
+function cnSessSave(){try{if(!NET||!MP||!MP.net||!NET.last)return;if(MP.over){cnSessClear();return;}
+ sessionStorage.setItem(CN_SK,JSON.stringify({code:NET.code,host:!!NET.host,seat:NET.seat,v:NET.v,S:NET.last,t:Date.now()}));}catch(e){}}
+function cnSess(h){
+ const s=cnSessGet();if(!s||s.code!==h||NET)return false;
+ cnOv("Voltando à partida…",true);
+ (async()=>{try{
+  const room=await cnMk(false,h);
+  cnNew(room,s.host,s.seat);cnApply({v:s.v,S:s.S},true);
+  NET.lastMsg={k:"cmp",v:NET.v,S:NET.last};cnSend(NET.lastMsg);cnHide();
+ }catch(e){NET=null;cnHide();cnOv("Não consegui voltar à partida ("+((e&&e.code)||"erro")+").",true);}})();
+ return true;
+}
 function cnLeave(){
- if(!NET)return;
+ if(!NET)return;cnSessClear();
  clearInterval(NET.ka);const r=NET.room;NET=null;
  try{r&&r.leave();}catch(e){}
  if(MP&&MP.net){clearTimeout(MP.t);MP=null;}
@@ -3979,6 +3995,7 @@ async function cnJoin(txt){
  try{
   const room=await cnMk(false,txt);
   cnNew(room,false,0);cnHello();
+  try{location.hash=room.code;}catch(e){}
   cnLobby();
  }catch(e){NET=null;cnHide();if(e&&CN_ERR[e.code])cnMsg(CN_ERR[e.code]);else cnOv("Não consegui entrar na sala ("+((e&&e.code)||"erro")+").",true);}
 }
@@ -4017,6 +4034,7 @@ function cnOn(m){
  if(d.k==="cstate"){if(m.peer)NET.peer=m.peer;NET.seat=d.seat;cnApply(d,!!d.f||!MP);return true;}
  if(d.k==="cmp"){cnApply(d,false);return true;}
  if(d.k==="bview"){cnBViewApply(d);return true;}
+ if(d.k==="bfx"){cnBFxApply(d);return true;}
  if(d.k==="bstart"){cnBStart(d);return true;}
  if(d.k==="bobs"){const B=mapB;if(B&&B.bid===d.bid&&B.obsAdj){obstacles=d.ob.map(a=>({x:a[0],y:a[1]}));B.obsAdj=false;cnStage();}return true;}
  if(d.k==="bready"){const B=mapB;if(B&&B.bid===d.bid){B.ready[d.s]=true;cnBMaybe();}return true;}
@@ -4073,6 +4091,7 @@ function cnApply(d,force){
  const keepCam=!force&&foc==="board"&&!!(P.bts&&P.bts.length);
  mode="map";if(!keepCam)userFoc=foc="map";gm="classic";
  NET.last=cnSer();NET.act=P.turn===seat&&!P.over;
+ cnSessSave();
  if(NET.act)mapSelFirst();
  cnHide();
  render();
@@ -4085,6 +4104,7 @@ function cnFlush(){
  if(MP.rolling||(MP.giant&&MP.giant.rolling)||(MP.dragon&&MP.dragon.rolling)||(MP.fort&&MP.fort.rolling))return;
  const s=cnSer();if(s===NET.last)return;
  NET.v++;NET.last=s;NET.lastMsg={k:"cmp",v:NET.v,S:s};cnSend(NET.lastMsg);
+ cnSessSave();
  if(MP.turn!==NET.seat||MP.over)NET.act=false;
 }
 // ---- batalha ao vivo: quem joga o turno na batalha envia o tabuleiro a cada mudança; o outro assiste no mapa menor/tabuleiro ----
@@ -4092,19 +4112,46 @@ let _bvT=0,_bvLast="";
 function cnBView(){
  _bvT=0;
  if(!NET||!MP||!MP.net||!NET.act||!curBT||mode!=="play"||window.FAST)return;
- const S=snap(),key=JSON.stringify(S)+"|"+acts+"|"+turn+"|"+(over?1:0);
+ const S=snap(),dc=($("dice")||{}).innerHTML||"",lg=logs.slice(0,4),key=JSON.stringify(S)+"|"+acts+"|"+turn+"|"+(over?1:0)+"|"+dc+"|"+lg.join("¦");
  if(key===_bvLast)return;_bvLast=key;
- cnSend({k:"bview",v:NET.v,id:curBT.id,S,hs:heartSpot,acts,turn,n:turnN,over:!!over});
+ cnSend({k:"bview",v:NET.v,id:curBT.id,S,hs:heartSpot,acts,turn,n:turnN,over:!!over,dc,lg});
 }
 function cnBViewApply(d){
  if(!NET||!MP||!MP.net||NET.act||mode==="play"||mapB||d.v!==NET.v||!d.S)return;
  const bt=MP.bts&&MP.bts.find(x=>x.id===d.id);if(!bt)return;
- bt.snap=d.S;bt.hs=d.hs||{1:null,2:null};bt.seen=true;
+ bt.snap=d.S;bt.hs=d.hs||{1:null,2:null};bt.seen=true;window._bvInfo={id:d.id,dc:d.dc||"",lg:d.lg||[],turn:d.turn};
  const k=d.v+":"+d.id;
  if(NET.specKey!==k){NET.specKey=k;pvId=d.id;userFoc=foc="board";} // primeiro lance deste turno: leva a câmera para a batalha
  render();
 }
-{const _r=render;render=function(){const r=_r.apply(this,arguments);
+// efeitos (flechas, shuriken, raio) da batalha ao vivo: o jogador ativo avisa e o outro reproduz sobre o tabuleiro
+{const bf=(w,a)=>{if(NET&&MP&&MP.net&&NET.act&&mode==="play"&&curBT&&!window.FAST)cnSend({k:"bfx",v:NET.v,id:curBT.id,w,a});};
+ const _sh=shoot,_su=shootShu,_sb=syBeam;
+ shoot=function(from,tgt,hit){bf("s",[from,{x:tgt.x,y:tgt.y,t:tgt.t},!!hit,board[from]?board[from].t:""]);return _sh.apply(this,arguments);};
+ shootShu=function(from,tgt,hit){bf("u",[from,{x:tgt.x,y:tgt.y,t:tgt.t},!!hit,board[from]?board[from].t:""]);return _su.apply(this,arguments);};
+ syBeam=function(sp,f,col,cells){bf("b",[{x:sp.x,y:sp.y},f,col,cells==null?null:cells]);return _sb.apply(this,arguments);};}
+function cnBFxApply(d){
+ if(!NET||!MP||!MP.net||NET.act||mode==="play"||mapB||d.v!==NET.v)return;
+ if(!(MP.bts&&MP.bts.find(x=>x.id===d.id)))return;
+ if(foc!=="board"||pvId!==d.id){pvId=d.id;userFoc=foc="board";render();}
+ window._fxUntil=Date.now()+1600;
+ const a=d.a;
+ try{
+  if(d.w==="b")syBeam({x:a[0].x,y:a[0].y},a[1],a[2],a[3]);
+  else{const sv=board[a[0]];board[a[0]]={t:a[3]||"soldier"};try{(d.w==="u"?shootShu:shoot)(a[0],a[1],a[2]);}finally{board[a[0]]=sv;}}
+ }catch(e){}
+}
+function cnBInfo(){
+ let e=$("bvInfo");const bw=document.querySelector(".bw");
+ if(!e&&bw){e=document.createElement("div");e.id="bvInfo";e.setAttribute("aria-live","polite");e.style.cssText="margin:6px 0;padding:6px 10px;border:1px solid var(--ln,#0003);border-radius:8px;font-size:.9rem;min-height:2.4em";bw.insertAdjacentElement("afterend",e);}
+ if(!e)return;
+ const I=window._bvInfo,on=!!(NET&&MP&&MP.net&&!NET.act&&mode==="map"&&foc==="board"&&I&&MP.bts&&MP.bts.some(x=>x.id===I.id));
+ e.hidden=!on;if(!on)return;
+ const k=I.dc+"|"+I.lg.join("¦");if(e._k===k)return;e._k=k;
+ e.innerHTML="";const d=document.createElement("div");d.innerHTML=I.dc;e.appendChild(d);
+ I.lg.forEach(t=>{const l=document.createElement("div");l.textContent=t;l.style.opacity=".8";e.appendChild(l);});
+}
+{const _r=render;render=function(){const r=_r.apply(this,arguments);try{cnBInfo();}catch(e){}
  if(NET&&MP&&MP.net&&!_cnT)_cnT=setTimeout(cnFlush,120);
  if(!curBT)_bvLast="";
  else if(NET&&MP&&MP.net&&NET.act&&mode==="play"&&!_bvT)_bvT=setTimeout(cnBView,120);

@@ -1374,7 +1374,7 @@ $("rot").onclick=()=>{flip=!flip;render();};
 $("heal").onclick=()=>{if(!locked())doHeal();};
 $("mount").onclick=()=>{if(!locked())doMount();};
 $("ritual").onclick=()=>{if(locked())return;revive=!revive;ritual=revive;fury=false;render();};
-{const h=location.hash.replace("#","");if(/^[a-z0-9]{3,12}$/.test(h))setTimeout(()=>joinRoom(h,false),700);}
+{const h=location.hash.replace("#","");if(/^[a-z0-9]{3,12}$/.test(h))setTimeout(()=>{if(!(typeof cnSess==="function"&&cnSess(h)))joinRoom(h,false);},700);}
 $("fury").onclick=()=>{if(locked())return;fury=!fury;revive=false;shuri=false;render();};
 $("shuri").onclick=()=>{if(locked())return;shuri=!shuri;fury=false;revive=false;render();};
 $("spd").onclick=()=>{aiFast=!aiFast;render();};
@@ -3929,8 +3929,24 @@ function cnOv(text,cancel,extra){
  o.appendChild(b);
 }
 function cnWait(t){if(typeof netNote==="function")netNote(t,true);}
+// ---- retomar a partida ao atualizar o navegador: o link da sala fica vinculado à partida ----
+const CN_SK="trvCnSess";
+function cnSessGet(){try{const s=JSON.parse(sessionStorage.getItem(CN_SK)||"null");return s&&s.code&&s.S&&Date.now()-s.t<864e5?s:null;}catch(e){return null;}}
+function cnSessClear(){try{sessionStorage.removeItem(CN_SK);}catch(e){}}
+function cnSessSave(){try{if(!NET||!MP||!MP.net||!NET.last)return;if(MP.over){cnSessClear();return;}
+ sessionStorage.setItem(CN_SK,JSON.stringify({code:NET.code,host:!!NET.host,seat:NET.seat,v:NET.v,S:NET.last,t:Date.now()}));}catch(e){}}
+function cnSess(h){
+ const s=cnSessGet();if(!s||s.code!==h||NET)return false;
+ cnOv("Voltando à partida…",true);
+ (async()=>{try{
+  const room=await cnMk(false,h);
+  cnNew(room,s.host,s.seat);cnApply({v:s.v,S:s.S},true);
+  NET.lastMsg={k:"cmp",v:NET.v,S:NET.last};cnSend(NET.lastMsg);cnHide();
+ }catch(e){NET=null;cnHide();cnOv("Não consegui voltar à partida ("+((e&&e.code)||"erro")+").",true);}})();
+ return true;
+}
 function cnLeave(){
- if(!NET)return;
+ if(!NET)return;cnSessClear();
  clearInterval(NET.ka);const r=NET.room;NET=null;
  try{r&&r.leave();}catch(e){}
  if(MP&&MP.net){clearTimeout(MP.t);MP=null;}
@@ -3979,6 +3995,7 @@ async function cnJoin(txt){
  try{
   const room=await cnMk(false,txt);
   cnNew(room,false,0);cnHello();
+  try{location.hash=room.code;}catch(e){}
   cnLobby();
  }catch(e){NET=null;cnHide();if(e&&CN_ERR[e.code])cnMsg(CN_ERR[e.code]);else cnOv("Não consegui entrar na sala ("+((e&&e.code)||"erro")+").",true);}
 }
@@ -4074,6 +4091,7 @@ function cnApply(d,force){
  const keepCam=!force&&foc==="board"&&!!(P.bts&&P.bts.length);
  mode="map";if(!keepCam)userFoc=foc="map";gm="classic";
  NET.last=cnSer();NET.act=P.turn===seat&&!P.over;
+ cnSessSave();
  if(NET.act)mapSelFirst();
  cnHide();
  render();
@@ -4086,6 +4104,7 @@ function cnFlush(){
  if(MP.rolling||(MP.giant&&MP.giant.rolling)||(MP.dragon&&MP.dragon.rolling)||(MP.fort&&MP.fort.rolling))return;
  const s=cnSer();if(s===NET.last)return;
  NET.v++;NET.last=s;NET.lastMsg={k:"cmp",v:NET.v,S:s};cnSend(NET.lastMsg);
+ cnSessSave();
  if(MP.turn!==NET.seat||MP.over)NET.act=false;
 }
 // ---- batalha ao vivo: quem joga o turno na batalha envia o tabuleiro a cada mudança; o outro assiste no mapa menor/tabuleiro ----
@@ -4093,14 +4112,14 @@ let _bvT=0,_bvLast="";
 function cnBView(){
  _bvT=0;
  if(!NET||!MP||!MP.net||!NET.act||!curBT||mode!=="play"||window.FAST)return;
- const S=snap(),key=JSON.stringify(S)+"|"+acts+"|"+turn+"|"+(over?1:0);
+ const S=snap(),dc=($("dice")||{}).innerHTML||"",lg=logs.slice(0,4),key=JSON.stringify(S)+"|"+acts+"|"+turn+"|"+(over?1:0)+"|"+dc+"|"+lg.join("¦");
  if(key===_bvLast)return;_bvLast=key;
- cnSend({k:"bview",v:NET.v,id:curBT.id,S,hs:heartSpot,acts,turn,n:turnN,over:!!over});
+ cnSend({k:"bview",v:NET.v,id:curBT.id,S,hs:heartSpot,acts,turn,n:turnN,over:!!over,dc,lg});
 }
 function cnBViewApply(d){
  if(!NET||!MP||!MP.net||NET.act||mode==="play"||mapB||d.v!==NET.v||!d.S)return;
  const bt=MP.bts&&MP.bts.find(x=>x.id===d.id);if(!bt)return;
- bt.snap=d.S;bt.hs=d.hs||{1:null,2:null};bt.seen=true;
+ bt.snap=d.S;bt.hs=d.hs||{1:null,2:null};bt.seen=true;window._bvInfo={id:d.id,dc:d.dc||"",lg:d.lg||[],turn:d.turn};
  const k=d.v+":"+d.id;
  if(NET.specKey!==k){NET.specKey=k;pvId=d.id;userFoc=foc="board";} // primeiro lance deste turno: leva a câmera para a batalha
  render();
@@ -4122,7 +4141,17 @@ function cnBFxApply(d){
   else{const sv=board[a[0]];board[a[0]]={t:a[3]||"soldier"};try{(d.w==="u"?shootShu:shoot)(a[0],a[1],a[2]);}finally{board[a[0]]=sv;}}
  }catch(e){}
 }
-{const _r=render;render=function(){const r=_r.apply(this,arguments);
+function cnBInfo(){
+ let e=$("bvInfo");const bw=document.querySelector(".bw");
+ if(!e&&bw){e=document.createElement("div");e.id="bvInfo";e.setAttribute("aria-live","polite");e.style.cssText="margin:6px 0;padding:6px 10px;border:1px solid var(--ln,#0003);border-radius:8px;font-size:.9rem;min-height:2.4em";bw.insertAdjacentElement("afterend",e);}
+ if(!e)return;
+ const I=window._bvInfo,on=!!(NET&&MP&&MP.net&&!NET.act&&mode==="map"&&foc==="board"&&I&&MP.bts&&MP.bts.some(x=>x.id===I.id));
+ e.hidden=!on;if(!on)return;
+ const k=I.dc+"|"+I.lg.join("¦");if(e._k===k)return;e._k=k;
+ e.innerHTML="";const d=document.createElement("div");d.innerHTML=I.dc;e.appendChild(d);
+ I.lg.forEach(t=>{const l=document.createElement("div");l.textContent=t;l.style.opacity=".8";e.appendChild(l);});
+}
+{const _r=render;render=function(){const r=_r.apply(this,arguments);try{cnBInfo();}catch(e){}
  if(NET&&MP&&MP.net&&!_cnT)_cnT=setTimeout(cnFlush,120);
  if(!curBT)_bvLast="";
  else if(NET&&MP&&MP.net&&NET.act&&mode==="play"&&!_bvT)_bvT=setTimeout(cnBView,120);
