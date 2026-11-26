@@ -3434,7 +3434,7 @@ function noPlayLeft(){
 var _puffQ=[];
 function puffQ(i){_puffQ.push(i);}
 {const _rp=render;render=function(){const r=_rp.apply(this,arguments);
- if(_puffQ.length){const q=_puffQ.splice(0);try{const cs=document.querySelectorAll("#board .c");q.forEach(i=>{const e=cs[i];if(!e)return;const b=e.getBoundingClientRect();
+ if(_puffQ.length){const q=_puffQ.splice(0);try{const cs=document.querySelectorAll("#board .c");q.forEach(i=>{const e=cs[(typeof flip!=="undefined"&&flip)?cs.length-1-i:i];if(!e)return;const b=e.getBoundingClientRect();
   const w=document.createElement("div");w.className="puff";w.style.cssText="left:"+(b.left+b.width/2)+"px;top:"+(b.top+b.height/2)+"px";
   for(let k=0;k<4;k++){const c=document.createElement("i");c.style.setProperty("--dx",(k-1.5)*9+"px");c.style.animationDelay=(k*60)+"ms";w.appendChild(c);}
   document.body.appendChild(w);setTimeout(()=>w.remove(),1300);});}catch(e){}}
@@ -4129,6 +4129,7 @@ function cnBViewApply(d){
  const _sh=shoot,_su=shootShu,_sb=syBeam;
  shoot=function(from,tgt,hit){bf("s",[from,{x:tgt.x,y:tgt.y,t:tgt.t},!!hit,board[from]?board[from].t:""]);return _sh.apply(this,arguments);};
  shootShu=function(from,tgt,hit){bf("u",[from,{x:tgt.x,y:tgt.y,t:tgt.t},!!hit,board[from]?board[from].t:""]);return _su.apply(this,arguments);};
+ const _pq=puffQ;puffQ=function(i){bf("p",[i]);return _pq.apply(this,arguments);};
  syBeam=function(sp,f,col,cells){bf("b",[{x:sp.x,y:sp.y},f,col,cells==null?null:cells]);return _sb.apply(this,arguments);};}
 function cnBFxApply(d){
  if(!NET||!MP||!MP.net||NET.act||mode==="play"||mapB||d.v!==NET.v)return;
@@ -4137,6 +4138,7 @@ function cnBFxApply(d){
  window._fxUntil=Date.now()+1600;
  const a=d.a;
  try{
+  if(d.w==="p"){puffQ(a[0]);render();return;}
   if(d.w==="b")syBeam({x:a[0].x,y:a[0].y},a[1],a[2],a[3]);
   else{const sv=board[a[0]];board[a[0]]={t:a[3]||"soldier"};try{(d.w==="u"?shootShu:shoot)(a[0],a[1],a[2]);}finally{board[a[0]]=sv;}}
  }catch(e){}
