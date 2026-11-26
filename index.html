@@ -1164,7 +1164,7 @@ function targets(i){
 function spend(n=1){
  ver++;acts-=n;
  const who=(sel!==null&&board[sel])?board[sel]:null;for(let k=0;k<n;k++)turnWho.push(who);
- const alive=[2,1].some(o=>o!==turn&&board.some(p=>p&&p.o===o));
+ const alive=[2,1].some(o=>o!==turn&&board.some(p=>p&&(p.ctrl!==undefined?p.ctrl:p.o)===o));
  if(!alive){over=true;winner=turn;log("Fim de jogo: "+NAMES[turn]+" venceu!");return;}
  if(acts<=0){
   if(!extraUsed&&who&&TYPES[who.t].extra&&turnWho.length===3&&turnWho.every(q=>q===who)&&board[idx(who.x,who.y)]===who){extraUsed=true;acts=1;lockP=who;log(NAMES[turn]+": ação extra para "+TYPES[who.t].name+" (usou as 3 ações nele).");return;}
@@ -1435,7 +1435,7 @@ function syCosmic(){const sp=sel!==null?board[sel]:null;if(!sp||sp.t!=="syphrus"
  while(inb(x,y)){const q=board[idx(x,y)];if(q&&q.obs)break;if(q&&!v.includes(q))v.push(q);x+=f[0];y+=f[1];}
  $("dice").innerHTML='<span class="big">'+String.fromCharCode(9855+r)+'</span> '+r+" (precisa "+nd+"+): "+(hit?"acertou!":"errou.");
  const anim=syBeam(sp,f,"#3aa0ff");let msg=NAMES[turn]+": Syphrus disparou o Grande Raio Cósmico ("+r+") – ";
- if(hit){msg+=v.length?v.map(q=>{const n=TYPES[q.t].name;if(TYPES[q.t].champ||q.t==="golem")return damage(q);kill(q);return n+" eliminado";}).join("; ")+".":"não havia ninguém na linha.";}else msg+="errou.";
+ if(hit){msg+=v.length?v.map(q=>{const n=TYPES[q.t].name;return damage(q);}).join("; ")+".":"não havia ninguém na linha.";}else msg+="errou.";
  log(msg);spend(2);if(acts<=0)sel=null;syDone(anim);}
 function syMindT(sp){const f=sp.f;let x=sp.x+f[0],y=sp.y+f[1],k=1;while(inb(x,y)){const q=board[idx(x,y)];if(q){return(!q.obs&&q.o!==sp.o&&q.t!=="undead")?{q,k}:null;}x+=f[0];y+=f[1];k++;}return null;}
 function syMind(){const sp=sel!==null?board[sel]:null;if(!sp||sp.t!=="syphrus"||sp.pt!==5||acts<1||over||(locked()&&!aiActing))return;
@@ -1743,7 +1743,7 @@ function startClassic(){
  mLog("Partida clássica iniciada. "+NAMES[MP.turn]+" começa (sorteio)."+(cmOpp==="bb"?" Bots: Azul ("+TYPES[MP.ctype[1]].name+", "+STRATS[MP.strat[1]]+") × Vermelho ("+TYPES[MP.ctype[2]].name+", "+STRATS[MP.strat[2]]+").":""));
  mapSelFirst();mapBoardInit=false;mode="map";mapB=null;foc=userFoc="map";render();
 }
-function mapSelFirst(){const g=MP.groups.find(h=>h.o===MP.turn);MP.sel=g?g.id:null;MP.sp={soldier:0,archer:0,guardian:0,c:0};}
+function mapSelFirst(){const L=(MP.lastG||{})[MP.turn],lg=L!==undefined?MP.groups.find(h=>h.id===L&&h.o===MP.turn&&!isLocked(h)&&!isEngaged(h)):null,g=lg||MP.groups.find(h=>h.o===MP.turn);MP.sel=g?g.id:null;MP.sp={soldier:0,archer:0,guardian:0,c:0};}
 
 // ---------- Regras do mapa ----------
 function mapCanMove(){window._noTrk=1;try{return MP.groups.some(g=>g.o===MP.turn&&mapReach(g).size>0);}finally{window._noTrk=0;}}
@@ -1809,6 +1809,7 @@ function mapMoveTo(g,n){
  if(T&&ti>=0&&ti<T.p.length-1){const refund=T.p[T.p.length-1].cum-T.p[ti].cum;MP.pips+=refund;T.p.length=ti+1;g.n=n;
   mLog(NAMES[g.o]+": exército voltou para "+mNode(n,g.o)+" e recuperou "+refund+" passo"+(refund>1?"s":"")+".");mapAfterMove();return;}
  const prevN=g.n;
+ (MP.lastG||(MP.lastG={}))[g.o]=g.id;
  {const use=Math.min(d,MP.pips);MP.pips-=use;if(d>use)MP.mb=Math.max(0,(MP.mb||0)-(d-use));
   const base=T?T.p[T.p.length-1].cum:0;
   const special=MP.groups.some(h=>h.o!==g.o&&h.n===n)||MP.bts.some(b=>b.node===n)||n===MAPD.o.A||n===MAPD.o.B||n===MAPD.o.D||n===MAPD.o.C1||n===MAPD.o.C2||n===MAPD.b[3-g.o]||!!MOBJ[n];
@@ -1836,7 +1837,7 @@ function mapSplit(){
  const sp=MP.sp,n=sp.soldier+sp.archer+sp.guardian+sp.c;if(!n||n>=mCnt(g))return;
  const ng={id:MP.nid++,o:g.o,n:g.n,u:{soldier:sp.soldier,archer:sp.archer,guardian:sp.guardian},c:sp.c?g.c:null};
  MUT.forEach(t=>{g.u[t]-=sp[t];});if(sp.c)g.c=null;
- MP.groups.push(ng);MP.sel=ng.id;MP.sp={soldier:0,archer:0,guardian:0,c:0};
+ MP.groups.push(ng);MP.sel=ng.id;(MP.lastG||(MP.lastG={}))[g.o]=ng.id;MP.sp={soldier:0,archer:0,guardian:0,c:0};
  mLog(NAMES[g.o]+" separou um exército de "+n+" peça"+(n>1?"s":"")+" em "+mNode(g.n,g.o)+".");if(MP.tut)tutAfterSplit(ng,g);render();
 }
 function mapMerge(){
