@@ -1378,7 +1378,7 @@ $("lbBot").onclick=()=>{autoObstacles();aiTeam=3-botColor;formMode=1;armyStart=t
 $("lbLab").onclick=()=>{lab=true;armyStart=false;formMode=0;aiTeam=2;diff=0;flip=false;mode="setup";render();};
 $("armyAuto").onclick=()=>{if(online&&online.ready[online.seat])return;
  if(mapB&&mapB.obsAdj){mapRandObs(mapB.obsTotal);mapB.obsPick=0;mapB.obsAdj=false;mapBattleStage();return;}
- if(mapB){myArmy=mapAutoPlace(myTeam,armyLimV,armyChampV,mapB.occ).map(l=>({t:l.t,x:l.x,y:l.y,f:l.f}));render();return;}const fm=formMode;formMode=2;myArmy=randomLayout().filter(l=>l.o===myTeam).map(l=>({t:l.t,x:l.x,y:l.y}));formMode=fm;render();};
+ if(mapB){myArmy=mapAutoArmy();render();return;}const fm=formMode;formMode=2;myArmy=randomLayout().filter(l=>l.o===myTeam).map(l=>({t:l.t,x:l.x,y:l.y}));formMode=fm;render();};
 $("armyClear").onclick=()=>{if(online&&online.ready[online.seat])return;
  if(mapB&&mapB.obsPick>0){obstacles=[];mapB.obsPick=mapB.obsTotal;render();return;}myArmy=[];render();};
 $("armyGo").onclick=armyReady;
@@ -1574,6 +1574,10 @@ const MOBJ={};Object.keys(MAPD.o).forEach(k=>{MOBJ[MAPD.o[k]]=k;});
 let gm="classic",cmStrat={1:"",2:""},cmN=50,cmShowSt=false,cmOpp="bot",cmHard=false,cmColor=1,cmChamp={1:"",2:""},MP=null,mapB=null,curBT=null,heartSpot={1:null,2:null},foc="map",userFoc="map",ftm=0,pvId=0,dagger={1:false,2:false},armyLimV=null,armyChampV=null;
 const MOWN=MAPD.n.map((d,i)=>d[2]==="r"?(i<=76?1:2):0);
 const MUT=["soldier","archer","guardian"],MNAME={soldier:"Soldado",archer:"Arqueiro",guardian:"Guardião"};
+const mLim=c=>Object.assign({},c.u,c.uni?{unicorn:c.uni}:{},c.und?{undead:c.und}:{});
+function mapAutoArmy(){const L=mapAutoPlace(myTeam,armyLimV,armyChampV,mapB.occ);const occ=(mapB.occ||[]).map(c=>({x:c.x,y:c.y,s:sz(c.t)})).concat(L.map(l=>({x:l.x,y:l.y,s:sz(l.t)})));
+ ["unicorn","undead"].forEach(t=>{const n=armyLimV[t]||0;if(n)undPlace(myTeam,n,occ,t).forEach(l=>{L.push(l);occ.push({x:l.x,y:l.y,s:1});});});
+ return L.map(l=>({t:l.t,x:l.x,y:l.y,f:l.f}));}
 const mCnt=g=>g.u.soldier+g.u.archer+g.u.guardian+(g.und||0)+(g.uni||0)+(g.c?1:0);
 const mStr=g=>g.u.soldier+1.2*g.u.archer+1.5*g.u.guardian+.8*(g.und||0)+1.3*(g.uni||0)+(g.c?4:0);
 function mNode(i,o){
@@ -1912,7 +1916,7 @@ function renderMap(){bvbTick();bvbLog();
    if(ch){const st=document.createElement("em");st.className="tks";st.textContent="★";t.appendChild(st);const hh=document.createElement("em");hh.className="tkh";hh.textContent="♥"+P.chp[o];t.appendChild(hh);}
    if(gs.length>1){t.title=gs.length+" exércitos";const mm=document.createElement("i");mm.textContent=gs.length;t.appendChild(mm);}
    b.appendChild(t);});
-  if(d[2]==="x"){const bo=i===MAPD.b[1]?1:2,h=document.createElement("em");h.className="bh b"+bo;h.textContent="♥"+P.bhp[bo];b.appendChild(h);}
+  if(d[2]==="x"){const bo=i===MAPD.b[1]?1:2,h=document.createElement("em");h.className="bh b"+bo;h.textContent="♜"+P.bhp[bo];b.appendChild(h);}
   b.onclick=()=>mapClickNode(i);B.appendChild(b);
  }
  const cur=P.turn;
@@ -1922,7 +1926,7 @@ function renderMap(){bvbTick();bvbLog();
  $("mDiceBox").hidden=P.over;renderDice();$("mEnd").hidden=P.over;$("mEnd").disabled=!hum||!!P.rolling||!!P.pend;
  const free=hum&&mFree();
  $("mAtk").hidden=!(free&&mapAtBase(cur));$("mFight").hidden=!(hum&&mFightOk()&&baseFoes(cur).length&&baseHome(cur).length);$("mFight").textContent=baseHome(cur).length>1?"Enfrentar o exército inimigo com o exército selecionado (gasta o turno)":"Enfrentar o exército inimigo dentro da base (gasta o turno)";$("mHeal").hidden=!(free&&mapChampAtBase(cur)&&P.chp[cur]<P.cmax[cur]);
- $("mBase").innerHTML=mTeamInfo()+"Vida da base: Azul ♥"+P.bhp[1]+" · Vermelho ♥"+P.bhp[2]+[1,2].map(o=>{const it=[(P.armor&&P.armor[o])?'<span class="it it-armor"></span>Couraça do Gigante':"",P.heart[o]?'<span class="it it-heart"></span>Coração de Dragão':"",P.dagger[o]?'<span class="it it-dagger"></span>Adaga do Rei Louco':""].filter(Boolean);return it.length?" · "+(o===1?"Azul":"Vermelho")+": "+it.join(", "):"";}).join("");
+ $("mBase").innerHTML=mTeamInfo()+"Vida da base: Azul ♜"+P.bhp[1]+" · Vermelho ♜"+P.bhp[2]+[1,2].map(o=>{const it=[(P.armor&&P.armor[o])?'<span class="it it-armor"></span>Couraça do Gigante':"",P.heart[o]?'<span class="it it-heart"></span>Coração de Dragão':"",P.dagger[o]?'<span class="it it-dagger"></span>Adaga do Rei Louco':""].filter(Boolean);return it.length?" · "+(o===1?"Azul":"Vermelho")+": "+it.join(", "):"";}).join("");
  renderEng();renderRev();
  $("mHint").textContent=P.over?"":(!hum?(P.vs[cur]==="b"?"O bot está jogando…":"Aguardando o jogador…"):P.pend?"Escolha a recompensa.":P.rolled?((P.pips+(P.mb||0))>0?"Escolha um exército e clique numa casa verde (andar) ou vermelha (atacar).":""):"Um turno é uma atividade só: jogar o dado para andar no mapa, lutar num combate em espera, atacar a base ou restaurar a vida. Separar e juntar exércitos é de graça.");
  // listas
@@ -2010,8 +2014,8 @@ function mapBotAct(){
  if(!mv){mapEnd();return;}
  mapMoveTo(mv.g,mv.n);
 }
-const ROUTES={cd:["C","D"],cb:["C","B"],cba:["C","B","A"],dba:["D","B","A"]};
-const STRATS={eq:"Equilibrada",agr:"Agressiva",def:"Defensiva",obj:"Objetivos",div:"Dividir rotas",cd:"Rota C → D",cb:"Rota C → B",cba:"Rota C → B → A",dba:"Rota D → B → A"};
+const ROUTES={cd:["C","D"],cb:["C","B"],cba:["C","B","A"],dba:["D","B","A"],ce:["C","E"],ceb:["C","E","B"],cbe:["C","B","E"],ced:["C","E","D"],cde:["C","D","E"],cebd:["C","E","B","D"],cbed:["C","B","E","D"],cbd:["C","B","D"],cdb:["C","D","B"],eb:["E","B"],ed:["E","D"],ebd:["E","B","D"],edb:["E","D","B"],cbda:["C","B","D","A"]};
+const STRATS={eq:"Equilibrada",agr:"Agressiva",def:"Defensiva",obj:"Objetivos",div:"Dividir rotas",cd:"Rota C → D",cb:"Rota C → B",cba:"Rota C → B → A",dba:"Rota D → B → A",ce:"Rota C → E",ceb:"Rota C → E → B",cbe:"Rota C → B → E",ced:"Rota C → E → D",cde:"Rota C → D → E",cebd:"Rota C → E → B → D",cbed:"Rota C → B → E → D",cbd:"Rota C → B → D",cdb:"Rota C → D → B",eb:"Rota E → B",ed:"Rota E → D",ebd:"Rota E → B → D",edb:"Rota E → D → B",cbda:"Rota C → B → D → A"};
 const STK=Object.keys(STRATS);
 // Recompensas: tropas sempre que possível; itens só em casos específicos.
 function botRw(o,k){
@@ -2020,13 +2024,15 @@ function botRw(o,k){
  if(k==="giant")return MP.cmax[o]<=(c==="nasheri"&&typeof window.NAS_ARM==="number"?window.NAS_ARM:4)?"armor":"soldiers";
  return tot>=20?"dagger":"troops";
 }
+// Taxa de vitória inicial de cada estratégia (simulações bot × bot); o aprendizado refina com as partidas reais.
+const STPRIOR={"ed": 0.523, "ced": 0.5, "cb": 0.52, "div": 0.413, "cbe": 0.568, "cd": 0.509, "eq": 0.405, "ce": 0.515, "cbd": 0.573, "def": 0.34, "cde": 0.473, "cdb": 0.493, "eb": 0.522, "cba": 0.486, "ceb": 0.51, "cbed": 0.546, "agr": 0.557, "obj": 0.458, "cbda": 0.538, "cebd": 0.522, "edb": 0.502, "dba": 0.497, "ebd": 0.529};
 // Estratégia "aprendiz": escolhe a melhor estratégia contra o campeão adversário (UCB sobre as estatísticas).
 function clsPick(o,v){
  if(v==="rnd")return STK[randInt(STK.length)];
  if(v)return v;
  const C=clsLoad(),c2=MP.ctype[3-o];let N=0;STK.forEach(s=>{const x=C.sv[s]&&C.sv[s][c2];if(x)N+=x.n;});
  let best=null,bv=-1;
- STK.forEach(s=>{const x=(C.sv[s]&&C.sv[s][c2])||{w:0,n:0},mean=(x.w+1)/(x.n+2),u=mean+.35*Math.sqrt(Math.log(N+2)/(x.n+1))+Math.random()*.02;if(u>bv){bv=u;best=s;}});
+ STK.forEach(s=>{const x=(C.sv[s]&&C.sv[s][c2])||{w:0,n:0},pp=STPRIOR[s]||.5,mean=(x.w+pp*8)/(x.n+8),u=mean+.35*Math.sqrt(Math.log(N+2)/(x.n+1))+Math.random()*.02;if(u>bv){bv=u;best=s;}});
  return best;
 }
 function mapBotChoose(o){
@@ -2035,7 +2041,7 @@ function mapBotChoose(o){
  const routeCur=()=>{if(!RT||P.turnN>45)return null;
   for(const k of RT){
    if(k==="C"){if(!P.campUsed[o]&&P.turnN<=25&&(M.some(g=>g.r==="c")||M.reduce((s,g)=>s+g.u.soldier,0)>=4))return"C";}
-   else if(k==="A"){if(!P.giant.dead)return"A";}else if(k==="B"){if(!P.fort.dead)return"B";}else if(k==="D"){if(!P.dragon.dead)return"D";}}
+   else if(k==="A"){if(!P.giant.dead)return"A";}else if(k==="B"){if(!P.fort.dead)return"B";}else if(k==="D"){if(!P.dragon.dead)return"D";}else if(k==="E"){if(!P.hunt.dead)return"E";}}
   return null;},rc=routeCur(),allow=k=>!RT||rc===null||rc===k;
  const fight=S==="agr"||P.force===o||((P.idle&&P.idle[o])||0)>=10;
  // observa o adversário: tendência de aproximação da minha base
@@ -2055,6 +2061,7 @@ function mapBotChoose(o){
  const baseHit=P.force!==o&&E.some(e=>e.n===own||(MDIST[e.n][own]<=2&&mStr(e)>=3));
  const okA=g=>S!=="agr"&&allow("A")&&!P.giant.dead&&(g.toA?g.u.soldier>=4:(mCnt(g)>=cA&&g.u.guardian+g.u.soldier>=4)),
        okB=g=>S!=="agr"&&S!=="def"&&allow("B")&&!P.fort.dead&&mCnt(g)>=cB&&g.u.archer>=3,
+       okE=g=>S!=="agr"&&(RT?RT.includes("E"):window.EGEN===true)&&allow("E")&&!P.hunt.dead&&!g.toA&&mCnt(g)>=8&&g.u.soldier+g.u.guardian>=4,
        okD=g=>S!=="agr"&&allow("D")&&!P.dragon.dead&&!g.toA&&dragonOk(g)&&mCnt(g)>=9&&(S!=="def"||threat<=defS);
  const val=(g,n)=>{
   if(g.tail){const fr=M.find(h=>h!==g&&!h.tail&&h.r!=="c"&&h.r!=="d"&&!h.camp);
@@ -2078,15 +2085,15 @@ function mapBotChoose(o){
   if(n===MAPD.o.A&&!P.giant.dead)return role==="a"&&okA(g)&&threat<=defS?(g.toA?300:200):-800;
   if(n===MAPD.o.B&&!P.fort.dead)return role==="a"&&okB(g)&&(g.c==="muntasir"||threat<=defS)?(g.c==="muntasir"?700:320):-800;
   if(n===MAPD.o.D&&!P.dragon.dead)return role==="a"&&okD(g)?(S==="obj"?450:350):-800;
-  if(n===MAPD.o.E&&!P.hunt.dead)return -800;
+  if(n===MAPD.o.E&&!P.hunt.dead)return role==="a"&&okE(g)?(RT?330:250):-800;
   if(n===foe)return fight?5000:-600;
   let v;
   if(role==="d")v=-MDIST[n][own]*40;
   else if(S!=="agr"&&threat>defS*(S==="def"?.6:.9)&&MDIST[g.n][own]<=(S==="def"?16:12))v=-MDIST[n][own]*15;
   else{
-   let tg=[];if(okB(g))tg.push(MAPD.o.B);if(okD(g))tg.push(MAPD.o.D);if(okA(g)&&!tg.length)tg.push(MAPD.o.A);
+   let tg=[];if(okE(g))tg.push(MAPD.o.E);if(okB(g))tg.push(MAPD.o.B);if(okD(g))tg.push(MAPD.o.D);if(okA(g)&&!tg.length)tg.push(MAPD.o.A);
    // evita disputar o mesmo ponto: se o inimigo já está mais perto de um objetivo, prefere outro
-   if(tg.length>1||okA(g)){const all=[];if(okB(g))all.push(MAPD.o.B);if(okD(g))all.push(MAPD.o.D);if(okA(g))all.push(MAPD.o.A);
+   if(tg.length>1||okA(g)){const all=[];if(okE(g))all.push(MAPD.o.E);if(okB(g))all.push(MAPD.o.B);if(okD(g))all.push(MAPD.o.D);if(okA(g))all.push(MAPD.o.A);
     const free=all.filter(nd=>!E.some(e=>mStr(e)>=3&&MDIST[e.n][nd]<MDIST[g.n][nd]));
     if(free.length)tg=free.sort((a,b)=>(a===MAPD.o.A)-(b===MAPD.o.A));}
    if(tg.length&&!(S==="agr")){const nd=tg.reduce((a,b)=>MDIST[g.n][a]<=MDIST[g.n][b]?a:b);v=-MDIST[n][nd]*20;}
@@ -2123,7 +2130,7 @@ function mapBattleStage(){
  if(B.queue.length){
   const o=B.queue[0];
   if(MP.vs[1]==="h"&&MP.vs[2]==="h"&&!B.passed){B.passed=true;mode="pass";$("passTxt").textContent="Batalha em "+mNode(B.node,o)+". Passe o aparelho para o jogador "+NAMES[o]+" posicionar as peças em segredo. O adversário não deve olhar.";render();return;}
-  B.queue.shift();B.passed=false;myTeam=o;flip=(MP&&MP.net)?netFlip(o):o===2;adir=null;armyLimV={...B.comp[o].u};armyChampV=B.comp[o].c;myArmy=[];
+  B.queue.shift();B.passed=false;myTeam=o;flip=(MP&&MP.net)?netFlip(o):o===2;adir=null;armyLimV=mLim(B.comp[o]);armyChampV=B.comp[o].c;myArmy=[];
   brushA=MUT.find(t=>armyLimV[t]>0)||armyChampV||"soldier";mode="army";render();return;}
  mapBattleGo();
 }
@@ -2157,15 +2164,15 @@ function mapReinforce(g,bt){
  if(MP.vs[o]==="b"){obstacles=bt.snap.ob.map(a=>({x:a[0],y:a[1]}));const L=mapAutoPlace(o,g.u,g.c,occ,(bt.comp[3-o]||{}).c);obstacles=[];reinfFinish(g,bt,L.map(l=>({t:l.t,x:l.x,y:l.y,f:l.f})));return;}
  mapB={reinf:true,bt,g,att:o,def:3-o,node:bt.node,comp:{},lay:{},queue:[],obsPick:0,picker:0,passed:false,occ};
  obstacles=bt.snap.ob.map(a=>({x:a[0],y:a[1]}));
- myTeam=o;flip=(MP&&MP.net)?netFlip(o):o===2;adir=null;armyStart=true;armyLimV={...g.u};armyChampV=g.c;myArmy=[];
+ myTeam=o;flip=(MP&&MP.net)?netFlip(o):o===2;adir=null;armyStart=true;armyLimV=mLim(g);armyChampV=g.c;myArmy=[];
  brushA=MUT.find(t=>armyLimV[t]>0)||armyChampV||"soldier";mode="army";render();
 }
 function reinfFinish(g,bt,L){
  const o=g.o;
  L.forEach(l=>{const t=l.t,champ=TYPES[t].champ;bt.snap.P.push([t,o,l.x,l.y,champ?Math.max(1,MP.chp[o]||TYPES[t].hp):TYPES[t].hp,l.f||(TYPES[t].facing?(o===1?[0,-1]:[0,1]):null),0,0,TYPES[t].horse?1:0]);});
  const cp=bt.comp[o];MUT.forEach(t=>{cp.u[t]+=g.u[t];});if(g.c)cp.c=g.c;
- if(g.und){cp.und=(cp.und||0)+g.und;const occ=bt.snap.P.map(a=>({x:a[2],y:a[3],s:sz(a[0])}));undPlace(o,g.und,occ).forEach(l=>bt.snap.P.push(["undead",o,l.x,l.y,1,null,0,0,0]));}
- if(g.uni){cp.uni=(cp.uni||0)+g.uni;const occ=bt.snap.P.map(a=>({x:a[2],y:a[3],s:sz(a[0])}));undPlace(o,g.uni,occ,"unicorn").forEach(l=>bt.snap.P.push(["unicorn",o,l.x,l.y,1,null,0,0,0]));}
+ if(g.und){cp.und=(cp.und||0)+g.und;const occ=bt.snap.P.map(a=>({x:a[2],y:a[3],s:sz(a[0])}));undPlace(o,Math.max(0,g.und-L.filter(l=>l.t==="undead").length),occ).forEach(l=>bt.snap.P.push(["undead",o,l.x,l.y,1,null,0,0,0]));}
+ if(g.uni){cp.uni=(cp.uni||0)+g.uni;const occ=bt.snap.P.map(a=>({x:a[2],y:a[3],s:sz(a[0])}));undPlace(o,Math.max(0,g.uni-L.filter(l=>l.t==="unicorn").length),occ,"unicorn").forEach(l=>bt.snap.P.push(["unicorn",o,l.x,l.y,1,null,0,0,0]));}
  if(!bt.gs.includes(g))bt.gs.push(g);
  obstacles=[];mapB=null;armyLimV=armyChampV=null;myArmy=[];mode="map";MP.act="done";
  mapSyncEng();mapEnd();
@@ -2185,7 +2192,7 @@ function mapArmyReady(){
  if(MP.net){cnMyReady();return;}
  mapBattleStage();
 }
-function armyNeed(){return armyLimV?MUT.reduce((s,t)=>s+armyLimV[t],0)+(armyChampV?1:0):12+(myArmy.some(q=>q.t==="muntasir")?MUX.s+MUX.g:0);}
+function armyNeed(){return armyLimV?MUT.reduce((s,t)=>s+armyLimV[t],0)+(armyLimV.unicorn||0)+(armyLimV.undead||0)+(armyChampV?1:0):12+(myArmy.some(q=>q.t==="muntasir")?MUX.s+MUX.g:0);}
 // Mortos-vivos que sobraram de batalhas anteriores entram automaticamente na fileira da frente
 function undPlace(o,n,occ,ty){const taken=new Set(),inZ=y=>o===1?y>=5:y<=4,rk=y=>o===1?y-5:4-y,out=[];
  occ.forEach(c=>{for(let a=0;a<c.s;a++)for(let b=0;b<c.s;b++)taken.add((c.y+b)*N+c.x+a);});
@@ -2194,7 +2201,7 @@ function undPlace(o,n,occ,ty){const taken=new Set(),inZ=y=>o===1?y>=5:y<=4,rk=y=
 function mapBattleGo(){
  const B=mapB,L=[];if(MP.t3)MP.t3g=false;
  [1,2].forEach(o=>{if(MP.vs[o]==="h"||MP.vs[o]==="r")L.push(...B.lay[o]);else L.push(...mapAutoPlace(o,B.comp[o].u,B.comp[o].c,undefined,B.comp[3-o].c));});
- [1,2].forEach(o=>{const n=B.comp[o].und||0;if(n)L.push(...undPlace(o,n,L.map(l=>({x:l.x,y:l.y,s:sz(l.t)}))));const n2=B.comp[o].uni||0;if(n2)L.push(...undPlace(o,n2,L.map(l=>({x:l.x,y:l.y,s:sz(l.t)})),"unicorn"));});
+ [1,2].forEach(o=>{const hl=MP.vs[o]==="h"||MP.vs[o]==="r",pl=t=>hl?(B.lay[o]||[]).filter(l=>l.t===t).length:0;const n=(B.comp[o].und||0)-pl("undead");if(n>0)L.push(...undPlace(o,n,L.map(l=>({x:l.x,y:l.y,s:sz(l.t)}))));const n2=(B.comp[o].uni||0)-pl("unicorn");if(n2>0)L.push(...undPlace(o,n2,L.map(l=>({x:l.x,y:l.y,s:sz(l.t)})),"unicorn"));});
  // monta o tabuleiro inicial, guarda e volta ao mapa: a batalha fica em espera
  if(MP.net&&B.remoteMu)obstacles=obstacles.filter(k=>!B.remoteMu.some(m=>m.mu===k.mu)).concat(B.remoteMu);
  fires=[];syM=null;board=Array(N*N).fill(null);layout=L;lastL=L;
@@ -2219,7 +2226,7 @@ function mapLive(){
    const t=p.t==="scythianF"?"scythian":p.t;if(TYPES[t].champ){ch=t;hp=p.hp;}else if(cb[t]!==undefined)cb[t]++;else cb.soldier++;});
   const gs=bt.gs.filter(h=>h.o===o&&MP.groups.includes(h));
   gs.forEach(g=>{MUT.forEach(t=>{const k=Math.min(g.u[t],cb[t]);g.u[t]=k;cb[t]-=k;});});
-  if(bt.comp[o].c&&!heartSpot[o]){if(ch){MP.chp[o]=Math.max(1,hp);}else{MP.chp[o]=0;gs.forEach(g=>{g.c=null;});}}
+  if(bt.comp[o].c&&!heartSpot[o]){if(ch){MP.chp[o]=Math.max(1,hp);}else{MP.chp[o]=0;MP.cdead[o]=true;gs.forEach(g=>{g.c=null;});}}
  });
 }
 function mapBattleDone(){
@@ -2409,7 +2416,7 @@ function mapRevive(o,sac){
  let tg=g.gs.find(h=>h.n===MAPD.b[o]);
  if(!tg){tg={id:MP.nid++,o,n:MAPD.b[o],u:{soldier:0,archer:0,guardian:0},c:null};MP.groups.push(tg);}
  tg.c=MP.ctype[o];MP.groups=MP.groups.filter(h=>h===tg||mCnt(h)>0||h.c);
- MP.chp[o]=MP.cmax[o];MP.cdead[o]=false;MP.act="revive";MP.revSel=null;
+ MP.bts.forEach(bt=>{if(bt.comp&&bt.comp[o]&&bt.comp[o].c)bt.comp[o].c=null;});MP.chp[o]=MP.cmax[o];MP.cdead[o]=false;MP.act="revive";MP.revSel=null;
  mLog(NAMES[o]+" sacrificou 5 peças (inclusive do ponto C, se havia) e reviveu o campeão na base com a vida completa (♥"+MP.chp[o]+").");MP.msg=NAMES[o]+" reviveu o campeão.";mapEnd();return true;
 }
 function renderRev(){
@@ -2830,7 +2837,7 @@ function renderEB1(key){
  ord.forEach((t,i)=>{
   const n=mPop(g,t),s=document.createElement("div");
   s.className="gslot"+(i===0?" tank":"")+(n?"":" empty");if(i===0)s.dataset.c="tank";
-  const sym=pEl(t==="champion"?(g.c||"galadyr"):t,o,78,P.chp[o]);
+  const sym=(t==="champion"&&!g.c)?document.createElement("span"):pEl(t==="champion"?(g.c||"galadyr"):t,o,78,P.chp[o]);
   const cnt=document.createElement("b");cnt.textContent=t==="champion"?(n?"♥"+P.chp[o]:"✖"):"×"+n;
   const lb=document.createElement("small");lb.textContent=(i===0?"Na frente · ":"")+NM[t];
   s.title=lb.textContent;s.append(pw(sym,cnt.textContent));
@@ -2931,7 +2938,7 @@ function renderFB(box,E,g,mine,can){
  // slots do jogador (5..7)
  ord.forEach((t,i)=>{const c=cells[5+X+i],n=mPop(g,t);
   const left=(pm&&t===mt&&t!=="champion")?n-1:n,gone=pm&&t===mt&&(t==="champion"||left<=0);
-  const el=pEl(t==="champion"?(g.c||"galadyr"):t,o,44,P.chp[o]);c.appendChild(pw(el,t==="champion"?(gone?"✖":(n?"♥"+P.chp[o]:"✖")):"×"+Math.max(0,left)));
+  const el=(t==="champion"&&!g.c)?document.createElement("span"):pEl(t==="champion"?g.c:t,o,44,P.chp[o]);c.appendChild(pw(el,t==="champion"?(gone?"✖":(n?"♥"+P.chp[o]:"✖")):"×"+Math.max(0,left)));
   c.title=(i===0?"Na frente · ":"")+{soldier:"Soldado",guardian:"Guardião",champion:"Campeão"}[t];
   if(!n||gone||left<=0)c.classList.add("empty");c.dataset.t=t;if(i===0){c.classList.add("front");c.dataset.c="tank";flash("tank",c);}
   if(can&&!noMelee){c.draggable=true;
@@ -2943,7 +2950,7 @@ function renderFB(box,E,g,mine,can){
  if(F.sold>0){const ki=km?4+F.kd:4,c=cells[ki];c.innerHTML="";c.className="fc "+(ki%2===0?"dk":"lt")+(ki>=5?" lt":"");c.draggable=false;c.onclick=null;
   put(ki,pEl("soldier",ko,44,0,true),"×"+F.sold,"ksold");}
  // marcha da tropa
- if(pm){const k=5+X-F.pd,el=pEl(mt==="champion"?(g.c||"galadyr"):mt,o,44,P.chp[o]);put(k,el,mt==="champion"?"♥"+P.chp[o]:"×1","march");cells[k].classList.add("mv");}
+ if(pm){const k=5+X-F.pd,el=(mt==="champion"&&!g.c)?document.createElement("span"):pEl(mt,o,44,P.chp[o]);put(k,el,mt==="champion"?"♥"+P.chp[o]:"×1","march");cells[k].classList.add("mv");}
  // arqueiros do jogador (casa 8)
  put(8+X,g.u.archer>0?pEl("archer",o,44):null,g.u.archer>0?"×"+g.u.archer:"✖","parch");cells[8+X].classList.add("bowc");if(!g.u.archer)cells[8+X].classList.add("empty");
  const wrap=document.createElement("div");wrap.className="fwrap";wrap.appendChild(st);const ln=document.createElement("div");ln.className="fline";wrap.appendChild(ln);
@@ -4344,7 +4351,7 @@ function cnStage(){
  if(B.obsAdj){
   if(B.picker===s){cnHide();myTeam=s;flip=netFlip(s);adir=null;armyStart=true;brushA="soldier";myArmy=[];mode="army";render();return;}
   mode="map";cnWait("Aguardando "+NAMES[B.picker]+" posicionar os obstáculos…");render();return;}
- if(!B.ready[s]){const first=!B.placed;B.placed=true;cnHide();myTeam=s;flip=netFlip(s);adir=null;armyStart=true;armyLimV={...B.comp[s].u};armyChampV=B.comp[s].c;if(first)myArmy=[];
+ if(!B.ready[s]){const first=!B.placed;B.placed=true;cnHide();myTeam=s;flip=netFlip(s);adir=null;armyStart=true;armyLimV=mLim(B.comp[s]);armyChampV=B.comp[s].c;if(first)myArmy=[];
   brushA=MUT.find(t=>armyLimV[t]>0)||armyChampV||"soldier";mode="army";render();return;}
  mode="map";cnWait("Peças posicionadas. Aguardando o adversário…");render();
 }
