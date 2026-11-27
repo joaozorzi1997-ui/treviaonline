@@ -739,7 +739,7 @@ function renderArmy(){
    const bt=document.createElement("button");bt.textContent=ARROW[dx+","+dy];bt.className=(cur[0]===dx&&cur[1]===dy)?"on":"";bt.onclick=()=>{adir=[dx,dy];render();};g.appendChild(bt);}}
  if(TYPES[brushA]&&sz(brushA)>1)for(let ay=0;ay<N-1;ay++)for(let ax=0;ax<N-1;ax++){if(myTeam===1?ay<5:ay>3)continue;const d=document.createElement("button");d.className="vp";d.style.left=(ax+1)*10+"%";d.style.top=(ay+1)*10+"%";d.setAttribute("aria-label","Centro entre casas");d.onclick=()=>armyPlace(ax,ay,true);$("vx").appendChild(d);}
  $("armyInfo").textContent="Você joga com o time "+NAMES[myTeam]+" (fileiras "+(myTeam===1?"1 a 5":"6 a 10")+"). Coloque 3 arqueiros, 6 soldados, 2 guardiões e 1 campeão (★); o adversário não vê suas posições até a partida começar. Obstáculos sorteados: "+obstacles.length+(online?". Sala "+online.code.toUpperCase()+" (envie o código e o link desta página ao amigo).":".");
- if(mapB)$("armyInfo").textContent=mapInfo();if(mapB&&mapB.reinf&&typeof reinfMark==="function")reinfMark();$("armyBtns").hidden=$("armyGo").hidden=!!(mapB&&mapB.obsPick>0);
+ if(mapB)$("armyInfo").textContent=mapInfo();if(mapB&&mapB.reinf&&typeof reinfMark==="function")reinfMark();$("armyBtns").hidden=!!(mapB&&mapB.obsAdj);$("armyGo").hidden=!!(mapB&&mapB.obsAdj&&mapB.obsPick>0);
 }
 function armyPlace(x,y,v){
  const m=$("armyMsg");m.textContent="";
@@ -4138,7 +4138,7 @@ function cnOn(m){
  if(d.k==="bview"){cnBViewApply(d);return true;}
  if(d.k==="bfx"){cnBFxApply(d);return true;}
  if(d.k==="bstart"){cnBStart(d);return true;}
- if(d.k==="bobs"){const B=mapB;if(B&&B.bid===d.bid&&B.obsAdj){obstacles=d.ob.map(a=>({x:a[0],y:a[1]}));B.obsAdj=false;cnStage();}return true;}
+ if(d.k==="bobs"){const B=mapB;if(B&&B.bid===d.bid&&B.obsAdj){obstacles=d.ob.map(a=>({x:a[0],y:a[1]}));B.obsAdj=false;B.obsPick=0;cnStage();}return true;}
  if(d.k==="bready"){const B=mapB;if(B&&B.bid===d.bid){B.ready[d.s]=true;cnBMaybe();}return true;}
  if(d.k==="blay"){const B=mapB;if(B&&B.bid===d.bid){B.lay[d.s]=d.L;B.got=B.got||{};B.got[d.s]=true;B.remoteMu=d.mu||[];cnBMaybe();}return true;}
  return /^[cb]/.test(d.k||"");
@@ -4307,7 +4307,7 @@ function cnStage(){
  if(B.obsAdj){
   if(B.picker===s){cnHide();myTeam=s;flip=netFlip(s);adir=null;armyStart=true;brushA="soldier";myArmy=[];mode="army";render();return;}
   mode="map";cnWait("Aguardando "+NAMES[B.picker]+" posicionar os obstáculos…");render();return;}
- if(!B.placed){B.placed=true;cnHide();myTeam=s;flip=netFlip(s);adir=null;armyStart=true;armyLimV={...B.comp[s].u};armyChampV=B.comp[s].c;myArmy=[];
+ if(!B.ready[s]){const first=!B.placed;B.placed=true;cnHide();myTeam=s;flip=netFlip(s);adir=null;armyStart=true;armyLimV={...B.comp[s].u};armyChampV=B.comp[s].c;if(first)myArmy=[];
   brushA=MUT.find(t=>armyLimV[t]>0)||armyChampV||"soldier";mode="army";render();return;}
  mode="map";cnWait("Peças posicionadas. Aguardando o adversário…");render();
 }
